@@ -59,15 +59,6 @@ export interface Procedure {
   monitoring: string[];
 }
 
-export interface Telemetry {
-  time: string;
-  module: string;
-  o2: number; // percent
-  co2: number; // mmHg partial pressure
-  pressure: number; // kPa
-  airQuality: 'nominal' | 'alert';
-}
-
 export type Authority = 'procedure' | 'medical' | 'chiron';
 export interface EarthMessage {
   id: string;
@@ -77,11 +68,4 @@ export interface EarthMessage {
   body: string;
   sentAt: number;
   arrivesAt: number;
-}
-
-export interface TimelineEntry {
-  time: number;
-  who: string;
-  text: string;
-  kind: 'report' | 'assessment' | 'assignment' | 'equipment' | 'task' | 'earth' | 'status' | 'warning';
 }

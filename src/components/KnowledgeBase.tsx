@@ -3,7 +3,7 @@ import { FileUp, ShieldCheck, X } from 'lucide-react';
 import type { Category, Procedure, Step } from '../emergency/types';
 
 const CATS: Category[] = ['dcs', 'respiratory', 'anaphylaxis', 'behavioral'];
-const catLabel: Record<Category, string> = { dcs: 'Pressure or EVA', respiratory: 'Breathing or cabin air', anaphylaxis: 'Allergic reaction', behavioral: 'Behavioral' };
+const catLabel: Record<Category, string> = { dcs: 'Post-EVA health concern', respiratory: 'Breathing difficulty', anaphylaxis: 'Possible allergic reaction', behavioral: 'Crew support' };
 
 // Turns a plain-text procedure (numbered lines) into a structured draft record.
 function fromText(fileName: string, text: string, category: Category): Procedure | undefined {
@@ -66,11 +66,14 @@ export function KnowledgeBase({ kb, onChange, onClose }: Props) {
       <header className="flex items-center justify-between px-6 pt-5">
         <div>
           <div className="font-mono text-[10px] tracking-[0.4em] text-gold">⚷ MISSION MEDICAL LIBRARY</div>
-          <div className="mt-1 font-serif text-2xl tracking-[0.15em] text-marble">APPROVED PROCEDURES</div>
+          <div className="mt-1 font-serif text-2xl tracking-[0.15em] text-marble">SCENARIO LIBRARY</div>
         </div>
         <button onClick={onClose} aria-label="Close" className="text-marble/70 hover:text-marble"><X /></button>
       </header>
       <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto px-6 py-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <p className="text-sm leading-relaxed text-[#f3c28d] lg:col-span-2">
+          Hypothetical training scenarios only. The in-app approval workflow is a prototype and does not mean a procedure is NASA-approved, clinically validated, or authorized for mission use.
+        </p>
         <table className="h-fit w-full text-left text-sm">
           <thead className="font-mono text-[9px] tracking-[0.2em] text-mute"><tr><th className="pb-2">PROCEDURE</th><th>VERSION</th><th>STATUS</th><th>MISSIONS</th><th>SOURCE</th><th /></tr></thead>
           <tbody>
@@ -78,7 +81,7 @@ export function KnowledgeBase({ kb, onChange, onClose }: Props) {
               <tr key={`${p.id}-${p.version}-${i}`} className="border-t border-marble/10 align-top">
                 <td className="py-2 pr-3"><div className="font-mono text-[10px] text-gold">{p.id}</div><div className="text-marble">{p.title}</div><div className="text-xs text-mute">{catLabel[p.category]} · {p.steps.length} steps</div></td>
                 <td className="py-2 font-mono text-marble/80">v{p.version}</td>
-                <td className="py-2"><span className={`border px-1.5 font-mono text-[9px] tracking-[0.15em] ${statusCls[p.status]}`}>{p.status.toUpperCase()}</span></td>
+                <td className="py-2"><span className={`border px-1.5 font-mono text-[9px] tracking-[0.15em] ${statusCls[p.status]}`}>{p.status === 'approved' ? 'ACTIVE DEMO' : p.status.toUpperCase()}</span></td>
                 <td className="py-2 text-xs text-marble/60">{p.missions.join(', ')}</td>
                 <td className="py-2 text-xs text-marble/60">{p.source.name}{p.source.approvedOn ? ` · approved ${p.source.approvedOn}` : ''}{p.source.document ? ` · ${p.source.document}` : ''}</td>
                 <td className="py-2">{p.status === 'draft' && <button onClick={() => approve(p)} className="flex items-center gap-1 border border-[#5cc8a8]/60 px-2 py-1 font-mono text-[9px] tracking-[0.15em] text-[#5cc8a8]"><ShieldCheck size={11} /> APPROVE</button>}</td>
@@ -88,7 +91,7 @@ export function KnowledgeBase({ kb, onChange, onClose }: Props) {
         </table>
 
         <aside className="space-y-3 text-sm">
-          <div className="font-mono text-[9px] tracking-[0.3em] text-mute">UPLOAD (MEDICAL TEAM, BEFORE LAUNCH)</div>
+          <div className="font-mono text-[9px] tracking-[0.3em] text-mute">SCENARIO RECORDS · DEMONSTRATION WORKFLOW</div>
           <label className="block text-xs text-marble/70">For text files, emergency type:
             <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className="mt-1 block w-full border border-marble/20 bg-void px-2 py-1.5 text-marble">
               {CATS.map((c) => <option key={c} value={c}>{catLabel[c]}</option>)}
@@ -99,9 +102,8 @@ export function KnowledgeBase({ kb, onChange, onClose }: Props) {
           {message && <p className="text-xs text-marble/80">{message}</p>}
           {originals.length > 0 && <ul className="text-xs text-mute">{originals.map((o) => <li key={o.name}>Original kept: {o.name} ({Math.round(o.size / 1024)} KB), not parsed</li>)}</ul>}
           <p className="text-xs leading-relaxed text-mute">
-            CHIRON only ever uses the newest <span className="text-[#5cc8a8]">approved</span> version that applies to the current mission. Drafts and superseded versions never override it. If none applies, CHIRON says so instead of making one up.
+            CHIRON uses the active scenario record for this demonstration. It is not a clinical protocol. Real crews must use mission-authorized instructions and qualified medical personnel.
           </p>
-          <p className="text-xs leading-relaxed text-mute">All records shown are demo records, not clinical guidance. Approval here is a demo of the workflow; a real system needs signed-in medical administrators.</p>
         </aside>
       </div>
     </div>

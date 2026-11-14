@@ -1,52 +1,20 @@
-import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, X } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import type { DayRecord, Mark, Mission } from '../types';
 import { indicators, indicatorById } from '../data/indicators';
 import { outsideness, stateFor } from '../data/simulate';
-import { DONKI_SOURCE, envRelevance, eventsForMission } from '../data/nasa';
 import { markColor, markLabel, stateColor, stateLabel } from '../lib/theme';
-import { EnvShape, Frieze, type FocusItem, type Selection } from './Frieze';
+import { Frieze, type FocusItem, type Selection } from './Frieze';
 import { GreekKey } from './Brand';
 
-// What a space-weather event or mission milestone means for this astronaut.
-function FocusCard({ item, mission, onClose }: { item: FocusItem; mission: Mission; onClose: () => void }) {
-  if (item.kind === 'milestone') {
-    const m = item.milestone;
-    const days = m.day - mission.today;
-    return (
-      <div className="rise mt-2 border border-marble/20 bg-void/60 p-3 text-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div className="font-mono text-[10px] tracking-[0.25em] text-marble/70">MISSION MILESTONE · DAY {m.day} · {days > 0 ? `IN ${days} DAYS` : days === 0 ? 'TODAY' : `${-days} DAYS AGO`}</div>
-          <button onClick={onClose} aria-label="Close" className="text-mute hover:text-marble"><X size={14} /></button>
-        </div>
-        <div className="mt-1 font-serif tracking-[0.08em] text-marble">{m.title}</div>
-        <p className="mt-1 text-xs text-marble/70">{m.health}</p>
-      </div>
-    );
-  }
-  const e = item.event;
-  const rel = envRelevance(e, mission);
-  const date = new Date(`${e.date}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+function FocusCard({ item, mission }: { item: FocusItem; mission: Mission }) {
+  const m = item.milestone;
+  const days = m.day - mission.today;
   return (
-    <div className="rise mt-2 border border-[#f2c14e]/40 bg-void/60 p-3 text-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.25em] text-[#f2c14e]">
-          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><EnvShape e={e} x={7} y={7} /></svg>
-          NASA DONKI · {date.toUpperCase()} · MISSION DAY {e.day}
-        </div>
-        <button onClick={onClose} aria-label="Close" className="text-mute hover:text-marble"><X size={14} /></button>
-      </div>
-      <div className="mt-1 font-serif tracking-[0.08em] text-marble">{rel.title}{e.type === 'SEP' && !e.observed ? ' (model prediction only)' : ''}</div>
-      <p className="mt-1 text-xs text-marble/75">{rel.why}</p>
-      <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-marble/55">
-        {rel.limits.map((l) => <li key={l}>{l}</li>)}
-      </ul>
-      <div className="mt-2 text-[11px] text-mute">
-        {e.records} DONKI record{e.records > 1 ? 's' : ''}{e.instruments.length ? `: ${e.instruments.slice(0, 3).join('; ')}${e.instruments.length > 3 ? '…' : ''}` : ''}
-      </div>
-      <a href={e.link} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 font-mono text-[10px] tracking-[0.15em] text-gold hover:text-marble">
-        OPEN THE NASA RECORD <ExternalLink size={10} />
-      </a>
+    <div className="rise mt-2 border border-marble/20 bg-void/60 p-3 text-sm">
+      <div className="font-mono text-[10px] tracking-[0.25em] text-marble/70">MISSION MILESTONE · DAY {m.day} · {days > 0 ? `IN ${days} DAYS` : days === 0 ? 'TODAY' : `${-days} DAYS AGO`}</div>
+      <div className="mt-1 font-serif tracking-[0.08em] text-marble">{m.title}</div>
+      <p className="mt-1 text-xs text-marble/70">{m.health}</p>
     </div>
   );
 }
@@ -104,7 +72,6 @@ interface Props {
 export function HealthRecord({ mission, records, marks, selection, onSelect }: Props) {
   const [open, setOpen] = useState(false);
   const [focus, setFocus] = useState<FocusItem>();
-  const env = useMemo(() => eventsForMission(mission), [mission]);
   const today = records.length - 1;
   const single = selection.from === selection.to;
   const day = selection.to;
@@ -157,11 +124,11 @@ export function HealthRecord({ mission, records, marks, selection, onSelect }: P
 
         <div className="mt-2">
           <Frieze records={records} totalDays={mission.totalDays} marks={marks} selection={selection} onSelect={pick}
-            env={env} milestones={mission.milestones} onFocus={setFocus} />
+            milestones={mission.milestones} onFocus={setFocus} />
           <div className="mt-1 px-1 text-[10px] text-mute">
-            Health readings are simulated. Space weather is real NASA DONKI data ({DONKI_SOURCE.coverage.map((c) => `${c.type} ${c.from} to ${c.to}`).join(', ')}; fetched {DONKI_SOURCE.fetchedAt.slice(0, 10)}).
+            Health readings are simulated for this demonstration, not clinical measurements.
           </div>
-          {focus && <FocusCard item={focus} mission={mission} onClose={() => setFocus(undefined)} />}
+          {focus && <FocusCard item={focus} mission={mission} />}
         </div>
 
         {open && <div className="rise mt-3 grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">

@@ -1,6 +1,6 @@
 import { ExternalLink } from 'lucide-react';
 import type { Insight } from '../lib/insights';
-import type { StudyKind } from '../data/nasa';
+import type { StudyKind } from '../data/research';
 
 const kindStyle: Record<StudyKind, string> = {
   Astronauts: 'border-gold/60 text-gold',

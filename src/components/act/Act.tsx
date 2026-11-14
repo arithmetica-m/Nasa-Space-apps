@@ -11,7 +11,7 @@ import { Behavioral } from './Behavioral';
 
 const CATEGORIES: { id: Category; label: string; hint: string; icon: typeof Siren }[] = [
   { id: 'dcs', label: 'Pressure or EVA problem', hint: 'Joint pain, numbness or tingling after an EVA', icon: Gauge },
-  { id: 'respiratory', label: 'Breathing or cabin air', hint: 'Short of breath, headache, alarm or smell in the cabin', icon: Wind },
+  { id: 'respiratory', label: 'Breathing difficulty', hint: 'A crew member reports a breathing concern', icon: Wind },
   { id: 'anaphylaxis', label: 'Severe allergic reaction', hint: 'Swelling, rash, trouble breathing after exposure', icon: ShieldAlert },
   { id: 'behavioral', label: 'Panic, distress or confusion', hint: 'Private support. Physical causes are checked first.', icon: Brain },
 ];

@@ -11,16 +11,17 @@ import { Routes } from './three/Routes';
 import { INTRO_VIEW, backdropView, framing, selectView } from './three/space';
 import { Intro } from './components/Intro';
 import { GreekKey } from './components/Brand';
-import { MissionProgress } from './components/MissionProgress';
 import { HealthRecord } from './components/HealthRecord';
 import { CheckIn } from './components/CheckIn';
 import { Today } from './components/watch/Today';
 import { Teach } from './components/teach/Teach';
 import { Act } from './components/act/Act';
-import { LiveBanner } from './components/act/LiveBanner';
 import { KnowledgeBase } from './components/KnowledgeBase';
+import { MissionDashboard } from './components/MissionDashboard';
+import { EmergencyAlerts } from './components/EmergencyAlerts';
+import { speak, useVoiceControl } from './components/VoiceControl';
 import type { Selection } from './components/Frieze';
-import { crew, procedures as emergencyProcedures } from './emergency/data';
+import { crew, inventoryFor, procedures as emergencyProcedures } from './emergency/data';
 import type { Procedure as EmergencyProcedure } from './emergency/types';
 import { useAccount } from './emergency/account';
 import { useLog } from './emergency/sync';
@@ -62,6 +63,29 @@ function useAspect() {
   return aspect;
 }
 
+function initialEmergencyKnowledge(): EmergencyProcedure[] {
+  const legacyScenarioIds = new Set(['DEMO-DCS-01', 'DEMO-ENV-02', 'DEMO-ANA-03', 'DEMO-BHP-04']);
+  try {
+    const raw = localStorage.getItem('chiron-kb-v1');
+    if (!raw) return emergencyProcedures;
+    const saved: unknown = JSON.parse(raw);
+    if (!Array.isArray(saved)) return emergencyProcedures;
+    const retained = saved.filter((value): value is EmergencyProcedure =>
+      typeof value === 'object' && value !== null
+      && 'id' in value && typeof value.id === 'string' && !legacyScenarioIds.has(value.id)
+      && 'title' in value && typeof value.title === 'string'
+      && 'category' in value && typeof value.category === 'string'
+      && ['dcs', 'respiratory', 'anaphylaxis', 'behavioral'].includes(value.category)
+      && 'steps' in value && Array.isArray(value.steps)
+      && 'status' in value && ['approved', 'draft', 'superseded'].includes(String(value.status)),
+    );
+    return [...emergencyProcedures, ...retained];
+  } catch (error) {
+    console.warn('Could not migrate the saved scenario library; using current demo scenarios.', error);
+    return emergencyProcedures;
+  }
+}
+
 export default function App() {
   const [phase, setPhase] = useState<Phase>('intro');
   const [mode, setMode] = useState<Mode>('watch');
@@ -76,12 +100,45 @@ export default function App() {
   const [extraMarks, setExtraMarks] = useState<Partial<Record<MissionId, Mark[]>>>({});
   const [joinEid, setJoinEid] = useState<string>();
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState<string>();
+  const [voiceConfirm, setVoiceConfirm] = useState(false);
   const [account, setAccount] = useAccount();
   // The mission's medical knowledge base, kept on the device (works offline).
-  const [kb, setKb] = usePersisted<EmergencyProcedure[]>('chiron-kb-v1', () => emergencyProcedures);
+  const [kb, setKb] = usePersisted<EmergencyProcedure[]>('chiron-kb-v2', initialEmergencyKnowledge);
   const log = useLog();
   const gmt = useGmt();
   const aspect = useAspect();
+  const voice = useVoiceControl((text) => {
+    const command = text.toLowerCase().replace(/[.!?]/g, '').trim();
+    if (/open my health profile|show my health profile/.test(command)) {
+      setSelectedProfile(account);
+      setMode('watch');
+      speak(`Opening your health profile, ${crew.find((member) => member.id === account)?.name ?? 'crew member'}.`);
+    } else if (/show crew status|crew status/.test(command)) {
+      setMode('watch');
+      setSelectedProfile(undefined);
+      speak('Crew status is displayed on the mission dashboard.');
+    } else if (/check my readiness|readiness for the next task/.test(command)) {
+      const needsAttention = (records[records.length - 1]?.drift ?? 0) >= 0.3;
+      speak(needsAttention
+        ? 'Your simulated readings need a review before the next task. Open Watch for details.'
+        : 'No simulated readings are flagged for attention. Confirm readiness with your mission lead.');
+      setMode('watch');
+    } else if (/explain my radiation exposure|radiation exposure/.test(command)) {
+      setMode('watch');
+      speak(`The mission estimate is ${mission?.radiationPerDay ?? 0} millisieverts per day. This is a simulated estimate, not a personal dosimeter reading.`);
+    } else if (/open emergency mode|open emergency response/.test(command)) {
+      setVoiceConfirm(true);
+      speak('Please confirm on screen to open emergency response.');
+    } else if (/show available medical equipment|available medical equipment|show available equipment/.test(command)) {
+      setInventoryOpen(true);
+      const items = mission ? inventoryFor(mission.id).filter((item) => item.status === 'available' && item.quantity > 0) : [];
+      speak(`${items.length} equipment items are marked available. The list is open on screen.`);
+    } else {
+      speak('Command not recognized. Try: open my health profile, show crew status, check my readiness, explain my radiation exposure, open emergency mode, or show available medical equipment.');
+    }
+  });
 
   const mission = chosen ? missions[chosen] : undefined;
   const todayCheckIn = chosen ? checkIns[chosen] : undefined;
@@ -122,6 +179,7 @@ export default function App() {
 
   const pick = (id: MissionId) => {
     setChosen(id);
+    setSelectedProfile(undefined);
     setHovered(undefined);
     setMode('watch');
     setSelection({ from: missions[id].today, to: missions[id].today });
@@ -144,7 +202,7 @@ export default function App() {
   return (
     <div className="relative h-full w-full bg-void">
       <Canvas camera={{ position: INTRO_VIEW.pos.toArray(), fov: 42, near: 0.05, far: 600 }} dpr={[1, 2]}>
-        <color attach="background" args={['#04070d']} />
+        <color attach="background" args={['#070b12']} />
         <ambientLight intensity={0.06} />
         <directionalLight position={SUN_DIR.clone().multiplyScalar(30).toArray()} intensity={2.6} />
         <Stars radius={180} depth={80} count={7000} factor={5} saturation={0} fade speed={0.3} />
@@ -173,38 +231,34 @@ export default function App() {
       {/* WATCH: the everyday view */}
       {phase === 'mission' && mission && (
         <div className="fade-in absolute inset-0 flex flex-col overflow-y-auto">
-          <header className="flex flex-wrap items-start justify-between gap-4 px-5 pt-5 md:px-8">
-            <div>
-              <div className="font-mono text-[10px] tracking-[0.4em] text-gold">⚷ CHIRON</div>
-              <div className="mt-1 font-serif text-2xl tracking-[0.2em] text-marble">{mission.name.toUpperCase()}</div>
-              <button onClick={back} className="mt-2 font-mono text-[10px] tracking-[0.3em] text-mute transition hover:text-gold">← CHANGE MISSION</button>
-            </div>
-            <div className="order-3 flex w-full justify-center lg:order-none lg:w-auto lg:flex-1">
-              <MissionProgress mission={mission} />
-            </div>
-            <div className="flex flex-col items-end gap-1.5">
-              <label className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] text-marble/70">
-                SIGNED IN AS
-                <select value={account} onChange={(e) => setAccount(e.target.value)} aria-label="Crew member using this device"
-                  className="border border-marble/20 bg-void px-2 py-1 font-sans text-xs tracking-normal text-marble">
-                  {crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </label>
-              <div className="font-mono text-[10px] tracking-[0.25em] text-marble/70 [text-shadow:0_1px_6px_#000,0_0_2px_#000]">
-                {gmt} GMT · EARTH {mission.delayLabel.toUpperCase()} EACH WAY
+          <MissionDashboard mission={mission} mode={mode} crew={crew} account={account} selectedProfile={selectedProfile}
+            activePatientIds={[...new Set(casesFrom(log).filter((item) => !item.ended && item.mission === mission.id).map((item) => item.patientId))]}
+            overallStatus={casesFrom(log).some((item) => !item.ended && item.mission === mission.id)
+              ? 'Emergency response in progress'
+              : todayCheckIn
+                ? 'All clear · no immediate crew actions pending'
+                : 'Routine crew check-in pending'}
+            statusNeedsAttention={casesFrom(log).some((item) => !item.ended && item.mission === mission.id)}
+            gmt={gmt} listening={voice.listening} voiceSupported={voice.supported}
+            onMode={(next) => next === 'act' ? mode !== 'act' && openAct() : setMode(next)}
+            onAccount={setAccount}
+            onProfile={(id) => { setSelectedProfile(id); setMode('watch'); }}
+            onCloseProfile={() => setSelectedProfile(undefined)}
+            onEmergency={() => openAct()}
+            onVoice={voice.toggle} onChangeMission={back} />
+
+          {voice.message && <div role="status" className="mx-4 -mt-2 mb-2 text-right text-xs text-[#9be7ef] md:mx-8">{voice.message}</div>}
+
+          {mode === 'watch' && selectedProfile && (
+            <>
+              <div className="flex flex-1 items-start px-4 py-2 md:px-8">
+                <Today mission={mission} records={records} checkedIn={!!todayCheckIn || selectedProfile !== account}
+                  name={crew.find((member) => member.id === selectedProfile)?.name.split(' ')[0]}
+                  onCheckIn={() => setCheckInOpen(true)} onTeach={openTeach} onEmergency={() => openAct()} />
               </div>
-              <button onClick={() => setLibraryOpen(true)} className="font-mono text-[10px] tracking-[0.25em] text-mute hover:text-gold">MISSION MEDICAL LIBRARY</button>
-            </div>
-          </header>
-
-          <LiveBanner mission={mission.id} account={account} kb={kb} onJoin={joinAct} />
-
-          <div className="flex flex-1 items-start px-5 py-3 md:px-8">
-            <Today mission={mission} records={records} checkedIn={!!todayCheckIn} name={crew.find((c) => c.id === account)?.name.split(" ")[0]}
-              onCheckIn={() => setCheckInOpen(true)} onTeach={openTeach} onEmergency={() => openAct()} />
-          </div>
-
-          <HealthRecord mission={mission} records={records} marks={marks} selection={selection} onSelect={setSelection} />
+              <HealthRecord mission={mission} records={records} marks={marks} selection={selection} onSelect={setSelection} />
+            </>
+          )}
         </div>
       )}
 
@@ -213,6 +267,7 @@ export default function App() {
         <Teach startWith={teachStart} uploaded={uploaded}
           onUpload={(p) => setUploaded((u) => [...u, p])}
           onComplete={(p) => addMark({ day: mission.today, kind: 'action', title: `Procedure: ${p.title.toLowerCase()}`, detail: `Completed all ${p.steps.length} steps with Chiron.` })}
+          onMedicalLibrary={() => setLibraryOpen(true)}
           onClose={() => setMode('watch')} />
       )}
 
@@ -222,6 +277,26 @@ export default function App() {
       )}
 
       {libraryOpen && <KnowledgeBase kb={kb} onChange={setKb} onClose={() => setLibraryOpen(false)} />}
+
+      {inventoryOpen && mission && (
+        <div className="fixed inset-0 z-[50] flex items-center justify-center bg-[#020408]/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="inventory-title">
+          <section className="max-h-[85vh] w-full max-w-2xl overflow-y-auto border border-marble/20 bg-[#080d14] p-5 md:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div><div className="font-mono text-[10px] tracking-[0.2em] text-gold">MISSION SUPPORT</div><h2 id="inventory-title" className="mt-1 text-xl font-semibold text-marble">Medical equipment</h2></div>
+              <button type="button" onClick={() => setInventoryOpen(false)} className="min-h-11 border border-marble/20 px-4 text-sm text-marble/75 hover:text-marble">Close</button>
+            </div>
+            <ul className="mt-5 divide-y divide-marble/10 border-y border-marble/10">
+              {inventoryFor(mission.id).map((item) => (
+                <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div><div className="text-sm text-marble">{item.name}</div><div className="mt-1 text-xs text-marble/50">{item.location} · quantity {item.quantity}</div></div>
+                  <span className={`font-mono text-[10px] tracking-wider ${item.status === 'available' && item.quantity > 0 ? 'text-[#7bd5b8]' : 'text-[#e39b4b]'}`}>{item.status.toUpperCase()}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-xs text-marble/45">Simulated manifest for demonstration; verify the physical inventory before use.</p>
+          </section>
+        </div>
+      )}
 
       {checkInOpen && mission && (
         <CheckIn
@@ -235,7 +310,31 @@ export default function App() {
         />
       )}
 
-      <div className="pointer-events-none absolute bottom-1 right-3 z-40 text-[10px] text-mute/60">
+      {phase === 'mission' && mission && <EmergencyAlerts mission={mission.id} onJoin={joinAct} />}
+
+      {voiceConfirm && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#020408]/85 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="voice-confirm-title">
+          <section className="w-full max-w-md border border-[#e45b5b]/70 bg-[#100c10] p-6 shadow-2xl">
+            <div className="font-mono text-[10px] tracking-[0.2em] text-[#ff8585]">VOICE COMMAND CONFIRMATION</div>
+            <h2 id="voice-confirm-title" className="mt-2 text-xl font-semibold text-marble">Open emergency response?</h2>
+            <p className="mt-2 text-sm text-marble/65">This opens the response screen only. A crew member must still report and confirm an emergency there.</p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setVoiceConfirm(false)} className="min-h-11 border border-marble/25 px-4 text-sm text-marble/80">Cancel</button>
+              <button type="button" onClick={() => { setVoiceConfirm(false); openAct(); }} className="min-h-11 bg-[#e45b5b] px-4 font-mono text-xs font-semibold tracking-wider text-[#130709]">OPEN RESPONSE</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {phase === 'mission' && (
+        <button type="button" onClick={() => mode !== 'act' && openAct()} disabled={mode === 'act'}
+          className="fixed bottom-4 right-4 z-[55] flex min-h-12 items-center gap-2 border border-[#e45b5b]/75 bg-[#1a0b10]/95 px-4 font-mono text-[10px] font-semibold tracking-[0.16em] text-[#ff8585] shadow-lg backdrop-blur transition hover:bg-[#e45b5b]/20 disabled:cursor-default"
+          aria-label={mode === 'act' ? 'Emergency response mode active' : 'Open emergency response'}>
+          <span className="h-2 w-2 animate-pulse rounded-full bg-[#e45b5b]" />
+          {mode === 'act' ? 'EMERGENCY MODE' : 'EMERGENCY'}
+        </button>
+      )}
+      <div className="pointer-events-none fixed bottom-1 left-3 z-40 text-[10px] text-mute/60">
         Simulated data for demonstration. Not clinical guidance.
       </div>
     </div>

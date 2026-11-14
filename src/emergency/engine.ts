@@ -1,5 +1,5 @@
 import type { MissionId } from '../types';
-import type { Category, CrewMember, InventoryItem, Procedure, Qualification, RoleId, Telemetry } from './types';
+import type { Category, CrewMember, InventoryItem, Procedure, Qualification, RoleId } from './types';
 
 // ---------- Procedure retrieval ----------
 
@@ -108,11 +108,4 @@ export function assignRoles(crew: CrewMember[], patientId: string, category: Cat
   };
   if (pool.length < 2) warnings.push('Only one crew member is available to help. CHIRON combined all roles.');
   return { roles, warnings };
-}
-
-// ---------- Environment ----------
-
-export function environmentFlags(t: Telemetry[]) {
-  const alerts = t.filter((m) => m.airQuality === 'alert');
-  return alerts.map((m) => `${m.module}: CO2 ${m.co2} mmHg, higher than the other modules (simulated reading). This may be a cabin air problem affecting more than one person.`);
 }

@@ -2,7 +2,7 @@ import type { DayRecord, Indicator, Mission, SystemId } from '../types';
 import { indicators, systems } from '../data/indicators';
 import { guidance } from '../data/guidance';
 import { outsideness } from '../data/simulate';
-import { DONKI_SOURCE, envRelevance, eventsForMission, studiesFor, type Study } from '../data/nasa';
+import { studiesFor, type Study } from '../data/research';
 import { referenceCard } from './references';
 
 // What kind of knowledge an insight rests on. Shown on every insight so the
@@ -36,8 +36,6 @@ export interface Insight {
 
 const procedureFor: Partial<Record<SystemId, string>> = { cardiovascular: 'resting-heart-rate', metabolic: 'temperature' };
 const fmt = (ind: Indicator, v: number) => (ind.unit.startsWith('/') ? `${v}${ind.unit}` : `${v} ${ind.unit}`);
-const dateText = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-
 // Days in a row, counting back from the latest reading, that this indicator was outside the normal range.
 function streak(ind: Indicator, records: DayRecord[]) {
   let n = 0;
@@ -89,45 +87,6 @@ function trendInsight(system: SystemId, records: DayRecord[]): Insight | undefin
   };
 }
 
-function spaceWeatherInsight(mission: Mission, records: DayRecord[]): Insight | undefined {
-  const relevantTypes = mission.id === 'iss' ? ['SEP', 'GST'] : ['SEP'];
-  const events = eventsForMission(mission).filter((e) => relevantTypes.includes(e.type));
-  if (!events.length) return undefined;
-  const last = events[events.length - 1];
-  const daysAgo = mission.today - last.day;
-  const rel = envRelevance(last, mission);
-  const dose = records[records.length - 1].values.dose;
-  const covered = DONKI_SOURCE.coverage.filter((c) => relevantTypes.includes(c.type));
-  return {
-    id: 'space-weather',
-    evidence: ['risk', 'research'],
-    title: daysAgo <= 3
-      ? `${rel.title} ${daysAgo === 0 ? 'today' : `${daysAgo} days ago`}`
-      : `${events.length} space-weather event${events.length > 1 ? 's' : ''} reported during this mission`,
-    why: `${rel.why} The latest was reported on ${dateText(last.date)} (mission day ${last.day}).`,
-    science: {
-      facts: [
-        ...events.slice(-5).reverse().map((e) => ({
-          label: `${dateText(e.date)} · day ${e.day}`,
-          value: `${envRelevance(e, mission).title}${e.type === 'SEP' ? (e.observed ? ' · observed' : ' · model prediction only') : ''} · ${e.records} record${e.records > 1 ? 's' : ''}`,
-        })),
-        { label: 'Your personal dosimeter today', value: dose !== undefined ? `${dose} mSv/day (simulated, kept separate from space weather)` : 'No reading' },
-        { label: 'Dates searched in NASA DONKI', value: covered.map((c) => `${c.from} to ${c.to}`).join(', ') || 'none' },
-      ],
-      studies: studiesFor('radiation'),
-      limitations: [
-        ...rel.limits,
-        'Radiation studies listed below used cells or tissue exposed on Earth or in orbit. They show biological effects, not your risk.',
-        'Measurements from NASA RadLab are not included yet.',
-      ],
-      sources: [
-        { label: 'NASA CCMC DONKI', url: 'https://ccmc.gsfc.nasa.gov/tools/DONKI/' },
-        ...events.slice(-3).map((e) => ({ label: `DONKI record ${dateText(e.date)}`, url: e.link })),
-      ],
-    },
-  };
-}
-
 function milestoneInsight(mission: Mission): Insight | undefined {
   const next = mission.milestones.find((m) => m.day >= mission.today && m.day - mission.today <= 45);
   if (!next) return undefined;
@@ -154,7 +113,6 @@ export function buildInsights(mission: Mission, records: DayRecord[]): Insight[]
     .filter((x): x is Insight => !!x);
   return [
     ...ranked.slice(0, 2),
-    spaceWeatherInsight(mission, records),
     milestoneInsight(mission),
   ].filter((x): x is Insight => !!x);
 }

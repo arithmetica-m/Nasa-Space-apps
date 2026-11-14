@@ -2,9 +2,9 @@
 
 Health software for astronauts, built for the NASA Space Apps Challenge 2026 ("Create Health Monitoring Software for Astronauts on Space Missions").
 
-CHIRON tracks each crew member's health every day, explains changes against their own pre-flight normal, and guides the crew in an emergency. It has three modes: Normal (green), Caution (amber) and Emergency (red).
+CHIRON is a health-support prototype for astronauts. WATCH presents personal health trends, TEACH explains spaceflight health research, and ACT coordinates role-specific crew actions in a simulated emergency.
 
-**All data in this app is simulated for demonstration. It is not clinical guidance.**
+**This is a demonstration, not a medical device or clinical guidance. Emergency scenarios are hypothetical training examples. They are not NASA-approved procedures.**
 
 ## Run it
 
@@ -29,32 +29,26 @@ npm run dev -- --host
 
 Then open the address Vite prints (Network) on each device. The log is also stored on each device, so CHIRON keeps working offline and catches up when reconnected.
 
-The crew, inventory, cabin readings and procedures are simulated demo records, not clinical guidance. Procedures live in the Mission medical library, where uploads arrive as drafts and only approved versions are used.
+The crew, inventory, health readings, and emergency scenarios are simulated. The emergency library demonstrates a draft/approval workflow only; it does not certify procedures for medical use.
 
-## NASA data
+## Health research
 
-Real NASA data is stored in `src/data/snapshots/` so the app works offline. Refresh it with:
+Selected spaceflight biology studies from NASA's Open Science Data Repository (OSDR) are stored in `src/data/snapshots/osdr.json` for offline health education. They provide research context, not patient-specific guidance or emergency procedures. Refresh the metadata with:
 
 ```bash
-npm run fetch-nasa
+npm run fetch-research
 ```
 
 | Source | Used for | Notes |
 | --- | --- | --- |
-| NASA CCMC DONKI (via api.nasa.gov) | Solar particle events and geomagnetic storms on the health line, and the space-weather insight | The API allows 60 days per request; with `DEMO_KEY` only the most relevant ranges are fetched. Set `NASA_API_KEY` for full coverage. Events are space-weather reports, never personal dose. |
-| NASA OSDR | "The science behind this" for each body system | Each study is labelled as astronauts, human ground study, human cells or tissue, or animal model. Studies are hand-picked per system in `src/data/nasa.ts`. |
-| NASA RadLab | Not used yet | The documentation page was down when this was built. |
-
-Health readings, baselines and the astronaut are simulated.
+| NASA OSDR | "The science behind this" in astronaut health explanations | Studies are labelled by participant/model type and curated by health system. The app's readings and baselines remain simulated. |
 
 ## Where things are
 
 | Path | What it holds |
 | --- | --- |
 | `src/data/indicators.ts` | Every health indicator: unit, personal normal range, how it is measured on board, why it matters |
-| `src/data/missions.ts` | Station, Moon, Mars transit and Mars surface: delay to Earth, gravity, path shape |
+| `src/data/missions.ts` | Demonstration mission profiles and communication delay |
 | `src/data/simulate.ts` | Simulated health history and the drift score for each day |
-| `src/lib/geometry.ts` | Maths for the mission path and the drifting health line |
-| `src/components/MissionView.tsx` | The home screen's centre: planets, planned path, your health path, marks, forecast |
-| `src/components/SidePanel.tsx` | Today's summary and the body systems list |
-| `src/components/TopBar.tsx` | Name, mission picker, mission clock, Earth delay, current mode |
+| `src/data/research.ts` | Curated NASA OSDR health research metadata |
+| `src/emergency/` | Simulated emergency scenarios, role assignment, and shared event log |

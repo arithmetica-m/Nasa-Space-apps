@@ -8,7 +8,7 @@ export interface Procedure {
   id: string;
   title: string;
   purpose: string;
-  source: { kind: 'approved' | 'uploaded'; label: string };
+  source: { kind: 'demo' | 'uploaded'; label: string };
   steps: { text: string; icon: StepIcon }[];
 }
 
@@ -17,7 +17,7 @@ export const procedures: Procedure[] = [
     id: 'blood-pressure',
     title: 'Measure your blood pressure',
     purpose: 'Your blood pressure has been higher than your normal. A careful reading tells Chiron if the change is real.',
-    source: { kind: 'approved', label: 'Demo protocol HP-03 · source to add' },
+    source: { kind: 'demo', label: 'Hypothetical CHIRON training guide · not NASA-approved' },
     steps: [
       { text: 'Sit still and secure yourself for 5 minutes before measuring.', icon: 'seat' },
       { text: 'Wrap the cuff around your bare upper arm, about two fingers above the elbow.', icon: 'cuff' },
@@ -30,7 +30,7 @@ export const procedures: Procedure[] = [
     id: 'resting-heart-rate',
     title: 'Take a resting heart rate',
     purpose: 'Your resting heart rate has been above your normal. Measuring it the same way each morning makes the trend reliable.',
-    source: { kind: 'approved', label: 'Demo protocol HP-01 · source to add' },
+    source: { kind: 'demo', label: 'Hypothetical CHIRON training guide · not NASA-approved' },
     steps: [
       { text: 'Measure first thing after waking, before exercise or coffee.', icon: 'timer' },
       { text: 'Put on the chest strap, or place your finger in the sensor.', icon: 'finger' },
@@ -42,7 +42,7 @@ export const procedures: Procedure[] = [
     id: 'temperature',
     title: 'Check your temperature',
     purpose: 'Body temperature runs a little higher in space, so Chiron compares it with your own normal.',
-    source: { kind: 'approved', label: 'Demo protocol HP-05 · source to add' },
+    source: { kind: 'demo', label: 'Hypothetical CHIRON training guide · not NASA-approved' },
     steps: [
       { text: 'Wait 15 minutes after eating, drinking or exercise.', icon: 'timer' },
       { text: 'Place the thermometer as shown on its label.', icon: 'thermometer' },
@@ -54,7 +54,7 @@ export const procedures: Procedure[] = [
     id: 'blood-sugar',
     title: 'Measure your blood sugar',
     purpose: 'A fasting reading before breakfast is the one Chiron compares with your normal.',
-    source: { kind: 'approved', label: 'Demo protocol HP-04 · source to add' },
+    source: { kind: 'demo', label: 'Hypothetical CHIRON training guide · not NASA-approved' },
     steps: [
       { text: 'Measure before breakfast. Wash and dry your hands.', icon: 'drop' },
       { text: 'Insert a new test strip into the meter.', icon: 'check' },

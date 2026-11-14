@@ -2,7 +2,7 @@ import type { MarkKind, State } from '../types';
 
 // Brand palette: dark space, with marble, bronze and muted gold as the classical accents.
 export const palette = {
-  void: '#04070d',
+  void: '#070b12',
   marble: '#e9e4da',
   gold: '#c8a96a',
   bronze: '#9c7448',

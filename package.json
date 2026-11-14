@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit -p . && vite build",
     "preview": "vite preview",
-    "fetch-nasa": "node scripts/fetch-nasa.mjs",
+    "fetch-research": "node scripts/fetch-research.mjs",
     "relay": "node scripts/relay.mjs"
   },
   "dependencies": {

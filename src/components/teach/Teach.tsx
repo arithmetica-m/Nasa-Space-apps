@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ArrowLeft, Check, FileUp, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, FileUp, TriangleAlert } from 'lucide-react';
 import { parseProtocol, procedures, type Procedure } from '../../data/procedures';
 import { StepIllustration } from '../StepIllustration';
 
@@ -8,12 +8,13 @@ interface Props {
   uploaded: Procedure[];
   onUpload: (p: Procedure) => void;
   onComplete: (p: Procedure) => void;
+  onMedicalLibrary: () => void;
   onClose: () => void;
 }
 
 // TEACH: Chiron as a visual instructor. One instruction per card, a picture,
 // progress, and a confirmation for each step.
-export function Teach({ startWith, uploaded, onUpload, onComplete, onClose }: Props) {
+export function Teach({ startWith, uploaded, onUpload, onComplete, onMedicalLibrary, onClose }: Props) {
   const all = [...procedures, ...uploaded];
   const [current, setCurrent] = useState<Procedure | undefined>(all.find((p) => p.id === startWith));
   const [step, setStep] = useState(0);
@@ -42,9 +43,14 @@ export function Teach({ startWith, uploaded, onUpload, onComplete, onClose }: Pr
           <div className="font-mono text-[10px] tracking-[0.4em] text-gold">⚷ CHIRON IS TEACHING</div>
           <div className="mt-1 font-serif text-2xl tracking-[0.18em] text-marble">PROCEDURES</div>
         </div>
-        <button onClick={onClose} className="flex items-center gap-2 font-mono text-[10px] tracking-[0.3em] text-marble/70 hover:text-gold">
-          <ArrowLeft size={14} /> BACK TO TODAY
-        </button>
+        <div className="flex items-center gap-4">
+          <button onClick={onMedicalLibrary} className="flex min-h-11 items-center gap-2 border border-marble/20 px-3 font-mono text-[10px] tracking-[0.15em] text-marble/70 hover:border-gold/60 hover:text-gold">
+            <BookOpen size={14} /> MISSION MEDICAL LIBRARY
+          </button>
+          <button onClick={onClose} className="flex min-h-11 items-center gap-2 font-mono text-[10px] tracking-[0.3em] text-marble/70 hover:text-gold">
+            <ArrowLeft size={14} /> BACK TO WATCH
+          </button>
+        </div>
       </header>
 
       <div className="grid min-h-0 flex-1 gap-6 px-6 py-5 md:grid-cols-[260px_minmax(0,1fr)] md:px-8">
@@ -99,8 +105,8 @@ export function Teach({ startWith, uploaded, onUpload, onComplete, onClose }: Pr
             <div className="w-full max-w-2xl">
               <h2 className="font-serif text-xl tracking-[0.12em] text-marble">{current.title.toUpperCase()}</h2>
               <p className="mt-1 text-sm text-marble/60">{current.purpose}</p>
-              <div className={`mt-2 inline-flex items-center gap-1.5 font-mono text-[9px] tracking-[0.2em] ${current.source.kind === 'approved' ? 'text-[#5cc8a8]' : 'text-[#e39b4b]'}`}>
-                {current.source.kind === 'approved' ? <ShieldCheck size={12} /> : <TriangleAlert size={12} />}
+              <div className={`mt-2 inline-flex items-center gap-1.5 font-mono text-[9px] tracking-[0.2em] ${current.source.kind === 'uploaded' ? 'text-[#e39b4b]' : 'text-[#c8a96a]'}`}>
+                <TriangleAlert size={12} />
                 {current.source.label.toUpperCase()}
               </div>
 

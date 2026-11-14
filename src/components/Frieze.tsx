@@ -1,21 +1,8 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import type { DayRecord, Mark, Milestone } from '../types';
-import type { EnvEvent } from '../data/nasa';
 import { markColor, markLabel } from '../lib/theme';
 
-export type MissionEnvEvent = EnvEvent & { day: number };
-export type FocusItem = { kind: 'env'; event: MissionEnvEvent } | { kind: 'milestone'; milestone: Milestone };
-
-// Real space-weather events from NASA DONKI: a four-point star for solar particle
-// events (filled when observed, outline when only modelled), a ring for geomagnetic storms.
-export function EnvShape({ e, x, y, scale = 1 }: { e: Pick<EnvEvent, 'type' | 'observed'>; x: number; y: number; scale?: number }) {
-  const s = 5.5 * scale;
-  if (e.type === 'SEP') {
-    return <path d={`M${x} ${y - s}L${x + s * 0.3} ${y - s * 0.3}L${x + s} ${y}L${x + s * 0.3} ${y + s * 0.3}L${x} ${y + s}L${x - s * 0.3} ${y + s * 0.3}L${x - s} ${y}L${x - s * 0.3} ${y - s * 0.3}Z`}
-      fill={e.observed ? '#f2c14e' : '#04070d'} stroke="#f2c14e" strokeWidth={1.2} />;
-  }
-  return <circle cx={x} cy={y} r={s * 0.6} fill="none" stroke="#9fb7d8" strokeWidth={1.4} />;
-}
+export type FocusItem = { kind: 'milestone'; milestone: Milestone };
 
 // The health trace: a smooth line across the mission's days. Two thin rules mark the
 // astronaut's own normal range. Inside the band the line is gold; where readings drift
@@ -73,12 +60,11 @@ interface Props {
   marks: Mark[];
   selection: Selection;
   onSelect: (s: Selection) => void;
-  env?: MissionEnvEvent[];
   milestones?: Milestone[];
   onFocus?: (f: FocusItem) => void;
 }
 
-export function Frieze({ records, totalDays, marks, selection, onSelect, env = [], milestones = [], onFocus }: Props) {
+export function Frieze({ records, totalDays, marks, selection, onSelect, milestones = [], onFocus }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const uid = useId().replace(/:/g, '');
   const [hover, setHover] = useState<number>();
@@ -191,16 +177,6 @@ export function Frieze({ records, totalDays, marks, selection, onSelect, env = [
           </g>
         ))}
 
-        {/* Space weather from NASA DONKI, above the band */}
-        {env.map((e) => (
-          <g key={e.id} className="cursor-pointer" onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => ev.stopPropagation()}
-            onClick={() => onFocus?.({ kind: 'env', event: e })}>
-            <line x1={x(e.day)} x2={x(e.day)} y1={TOP - 6} y2={BOT} stroke={e.type === 'SEP' ? '#f2c14e' : '#9fb7d8'} strokeOpacity={0.25} strokeDasharray="2 3" />
-            <circle cx={x(e.day)} cy={TOP - 12} r={9} fill="transparent" />
-            <EnvShape e={e} x={x(e.day)} y={TOP - 12} />
-          </g>
-        ))}
-
         {/* Mission milestones with a health meaning, past and ahead */}
         {milestones.filter((m) => m.day <= totalDays).map((m) => {
           const my = m.day <= today ? ys[m.day] : MID;
@@ -243,8 +219,6 @@ export function Frieze({ records, totalDays, marks, selection, onSelect, env = [
           </span>
         ))}
         <span className="flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><path d="M6 6l6 0l-6 6l-6 -6z" transform="translate(0 -3)" fill="#04070d" stroke={MARBLE} strokeWidth="1.2" /></svg>MISSION MILESTONE</span>
-        <span className="flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><EnvShape e={{ type: 'SEP', observed: true }} x={7} y={7} scale={1.1} /></svg>SOLAR PARTICLE EVENT · NASA DONKI (OUTLINE = MODEL ONLY)</span>
-        <span className="flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden><EnvShape e={{ type: 'GST', observed: true }} x={7} y={7} /></svg>GEOMAGNETIC STORM · NASA DONKI</span>
       </div>
     </div>
   );

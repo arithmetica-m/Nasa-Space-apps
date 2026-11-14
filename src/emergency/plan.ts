@@ -1,6 +1,6 @@
 import type { MissionId } from '../types';
 import type { ChironEvent } from './events';
-import type { Category, CrewMember, EarthMessage, InventoryItem, Procedure, RoleId, Step, TimelineEntry } from './types';
+import type { Category, CrewMember, EarthMessage, InventoryItem, Procedure, RoleId, Step } from './types';
 import { crew as baseCrew, inventoryFor } from './data';
 import { assignRoles, checkResources, resolveProcedure, roleName, type ResourceCheck, type Roles } from './engine';
 
@@ -75,12 +75,6 @@ export function casesFrom(log: ChironEvent[]): EmergencyCase[] {
   return [...map.values()];
 }
 
-export function linkLost(log: ChironEvent[]) {
-  let lost = false;
-  for (const e of log) if (e.type === 'link') lost = e.lost;
-  return lost;
-}
-
 // ---------- The adaptive plan ----------
 
 export type TaskStatus = 'done' | 'cannot' | 'ready' | 'waiting' | 'blocked';
@@ -88,7 +82,6 @@ export interface Task {
   step: Step;
   status: TaskStatus;
   assignee?: CrewMember;
-  added?: string; // why CHIRON added it, for tasks that are not in the approved procedure
   waitingFor: string[];
   blockedBy?: string;
 }
@@ -116,42 +109,27 @@ export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[],
   const checks = procedure ? checkResources(procedure, inventory) : [];
   const alerts: string[] = [];
 
-  const steps: { step: Step; added?: string }[] = (procedure?.steps ?? []).map((s) => ({ step: s }));
+  const steps = procedure?.steps ?? [];
 
-  // Adaptive: an item with no approved alternative becomes a question for Earth.
+  // Surface a missing resource without inventing steps outside the scenario procedure.
   for (const ch of checks.filter((x) => !x.ok && !x.alternative)) {
-    steps.push({
-      step: { id: `x-item-${ch.itemId}`, role: 'earth', text: `Tell Earth that ${ch.name.toLowerCase()} is ${ch.status}, and ask for approved options.`, why: 'The approved procedure needs it and lists no alternative.', verify: 'confirm', ifCannot: 'Queue the message; it leaves when the link returns.' },
-      added: `Added by CHIRON: ${ch.name} unavailable`,
-    });
     alerts.push(`${ch.name} is ${ch.status}. No approved alternative is listed.`);
   }
 
-  // Adaptive: escalation when a recorded observation meets a demo escalation rule.
+  // Flag reported changes for the crew; do not generate clinical instructions.
   const last = c.vitals[c.vitals.length - 1];
   const prev = [...c.vitals].reverse().find((v, i) => i > 0 && v.spo2 !== undefined);
   const falling = last?.spo2 !== undefined && prev?.spo2 !== undefined && last.spo2 < prev.spo2 - 2;
   const esc = last && ((last.spo2 !== undefined && last.spo2 < DEMO_SPO2_ESCALATE) || (last.hr !== undefined && last.hr > DEMO_HR_ESCALATE) || falling || /worse/i.test(last.note ?? ''));
   if (esc) {
     const why = last.spo2 !== undefined && last.spo2 < DEMO_SPO2_ESCALATE ? `blood oxygen ${last.spo2}%` : last.hr !== undefined && last.hr > DEMO_HR_ESCALATE ? `heart rate ${last.hr} bpm` : falling ? 'blood oxygen falling' : 'patient reports feeling worse';
-    const tag = `x-esc-${last.t}`;
-    steps.push(
-      { step: { id: `${tag}-lead`, role: 'lead', text: `Escalation: ${why}. Follow the escalation section of the approved card.`, why: 'A demo escalation rule was met. Limits are demo values, not approved ones.', verify: 'clinical', ifCannot: 'Tell Earth immediately.' }, added: 'Added by CHIRON: escalation' },
-      { step: { id: `${tag}-earth`, role: 'earth', text: `Send an urgent update to the flight surgeon: ${why}.`, why: 'Earth must know when the situation gets worse.', verify: 'confirm', ifCannot: 'Queue it as urgent.' }, added: 'Added by CHIRON: escalation' },
-    );
-    alerts.unshift(`Escalation: ${why} (demo rule).`);
-  }
-
-  // Adaptive: a repeat observation is due if none has been recorded for a while.
-  const lastObs = last?.t ?? c.startedAt;
-  if (procedure && Date.now() - lastObs > 60_000) {
-    steps.push({ step: { id: `x-obs-${Math.floor((Date.now() - c.startedAt) / 60_000)}`, role: 'monitor', text: 'Next observation is due. Record blood oxygen, heart rate and how the patient feels.', why: procedure.monitoring[0] ?? 'Regular observations show whether things are improving.', verify: 'confirm', ifCannot: 'Ask another crew member.' }, added: 'Added by CHIRON: monitoring schedule (demo: every minute)' });
+    alerts.unshift(`Notify the medical lead: reported change (${why}).`);
   }
 
   const relevant = (s: Step) => !s.when || c.outcomes[s.when.step]?.outcome === s.when.answer;
   const decided = (s: Step) => !s.when || !!c.outcomes[s.when.step];
   const settled = (id: string) => {
-    const s = steps.find((x) => x.step.id === id)?.step;
+    const s = steps.find((step) => step.id === id);
     if (!s) return true;
     if (!decided(s)) return false;
     if (!relevant(s)) return true;
@@ -159,41 +137,17 @@ export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[],
   };
 
   const tasks: Task[] = steps
-    .filter(({ step }) => decided(step) ? relevant(step) : true)
-    .map(({ step, added }) => {
+    .filter((step) => decided(step) ? relevant(step) : true)
+    .map((step) => {
       const o = c.outcomes[step.id]?.outcome;
       const waitingFor = (step.after ?? []).filter((id) => !settled(id));
       const unusable = (step.equipment ?? []).map((id) => checks.find((ch) => ch.itemId === id)).find((ch) => ch && !ch.ok && !ch.alternative);
       let status: TaskStatus = o === 'cannot' ? 'cannot' : o ? 'done' : !decided(step) || waitingFor.length ? 'waiting' : 'ready';
       if (status === 'ready' && unusable) status = 'blocked';
-      return { step, status, assignee: roles[step.role].person, added, waitingFor, blockedBy: unusable ? `${unusable.name} is ${unusable.status}` : undefined };
+      return { step, status, assignee: roles[step.role].person, waitingFor, blockedBy: unusable ? `${unusable.name} is ${unusable.status}` : undefined };
     });
 
   return { procedure, missing: reason, roles, warnings, checks, tasks, alerts, patient };
-}
-
-// ---------- Timeline from the log ----------
-
-export function timelineFor(c: EmergencyCase, log: ChironEvent[], plan: Plan): TimelineEntry[] {
-  const out: TimelineEntry[] = [];
-  const stepText = (id: string) => plan.tasks.find((t) => t.step.id === id)?.step.text ?? id;
-  for (const e of log) {
-    if ('eid' in e && e.eid !== c.eid) continue;
-    if (e.type === 'start' && e.eid === c.eid) out.push({ time: e.t, who: name(e.by), kind: 'report', text: `Emergency reported for ${name(e.patientId)}${e.reason ? ` (${e.reason})` : ''}.` });
-    if (e.type === 'step') out.push({ time: e.t, who: name(e.by), kind: e.outcome === 'cannot' ? 'warning' : 'task', text: e.outcome === 'yes' || e.outcome === 'no' ? `Answered ${e.outcome.toUpperCase()}: ${plan.tasks.find((t) => t.step.id === e.stepId)?.step.ask?.question ?? ''}` : `${e.outcome === 'cannot' ? 'Could not complete' : 'Done'}: ${stepText(e.stepId)}` });
-    if (e.type === 'verify') out.push({ time: e.t, who: name(e.by), kind: 'assessment', text: `Medical lead verified: ${stepText(e.stepId)}` });
-    if (e.type === 'vitals') out.push({ time: e.t, who: name(e.by), kind: 'assessment', text: `Observation: ${[e.spo2 !== undefined && `SpO2 ${e.spo2}%`, e.hr !== undefined && `HR ${e.hr} bpm`, e.note].filter(Boolean).join(' · ')}` });
-    if (e.type === 'item' && e.mission === c.mission && e.t >= c.startedAt) out.push({ time: e.t, who: name(e.by), kind: 'equipment', text: e.note });
-    if (e.type === 'crew' && e.t >= c.startedAt) out.push({ time: e.t, who: name(e.by), kind: 'status', text: `${name(e.crewId)} marked ${e.available ? 'available' : 'unavailable'}. Roles updated.` });
-    if (e.type === 'message') {
-      // Messages from Earth appear only once they have actually arrived.
-      if (e.message.direction === 'in') { if (e.message.arrivesAt <= Date.now()) out.push({ time: e.message.arrivesAt, who: 'Earth', kind: 'earth', text: `From Earth: ${e.message.title}` }); }
-      else out.push({ time: e.t, who: name(e.by), kind: 'earth', text: `To Earth: ${e.message.title}` });
-    }
-    if (e.type === 'link' && e.t >= c.startedAt) out.push({ time: e.t, who: name(e.by), kind: 'status', text: e.lost ? 'Link to Earth lost. Reports queued.' : 'Link to Earth restored. Queued reports sent.' });
-    if (e.type === 'end') out.push({ time: e.t, who: name(e.by), kind: 'status', text: 'Stood down.' });
-  }
-  return out.sort((a, b) => b.time - a.time);
 }
 
 export { roleName };

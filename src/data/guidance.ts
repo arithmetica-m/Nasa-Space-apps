@@ -33,6 +33,6 @@ export const guidance: Record<SystemId, { why: string; suggest: string }> = {
   },
   radiation: {
     why: 'Deep space has little shielding, so radiation dose adds up across the mission.',
-    suggest: 'Follow the shelter plan during solar storms.',
+    suggest: 'Review your personal dosimeter trend with the mission medical officer.',
   },
 };
