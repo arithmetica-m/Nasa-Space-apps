@@ -1,0 +1,375 @@
+{
+ "source": "NASA Open Science Data Repository (OSDR)",
+ "fetchedAt": "2026-11-14T08:40:50.570Z",
+ "bySystem": {
+  "cardiovascular": [
+   {
+    "accession": "OSD-52",
+    "title": "Expression data from SPHINX (SPaceflight of Huvec: an INtegrated eXperiment)",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Spaceflight Study",
+    "mission": "Expedition 25",
+    "program": "International Space Station (ISS)",
+    "summary": "Changes in the physical environment modulate cell responses and may lead to the impairment or even failure of tissue function as a result of mechanotransduction processes. It has been suggested that this situation occurs in some age-related diseases and some pathological conditions observed in space, such as cardiovasc",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-52"
+   },
+   {
+    "accession": "OSD-481",
+    "title": "New insights into the role of lncRNA after spaceflight",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Peripheral Blood",
+    "projectType": "Spaceflight Study",
+    "program": "International Space Station (ISS)",
+    "summary": "We analyzed the transcriptional profile by RNA-sequencing of exosomal content isolated from blood plasma of three astronauts who flew on various ISS missions between 1998-2001. Computational analysis of the transcriptome of these exosomes identified 27 differentially expressed lncRNAs with possible functions and clinic",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-481"
+   },
+   {
+    "accession": "OSD-484",
+    "title": "Astronauts plasma-derived exosomes induced gene expression in AC16 cells",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Ground Study",
+    "summary": "There are unique stressors in the spaceflight environment. Exposure to such stressors is associated with adverse effects on astronauts' health, including increased cancer and cardiovascular disease risks. Small extracellular vesicles (sEVs, i.e., exosomes) play a vital role in intercellular communication and regulate v",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-484"
+   },
+   {
+    "accession": "OSD-635",
+    "title": "Spaceflight effects on human vascular smooth muscle cell phenotype and function",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-17",
+    "program": "International Space Station (ISS)",
+    "summary": "The cardiovascular system is strongly impacted by the hazards of spaceflight. Astronauts spending steadily increasing lengths of time in microgravity are subject to cardiovascular deconditioning resulting in loss of vascular tone, reduced total blood volume, and diminished cardiac output. Appreciating the mechanisms by",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-635"
+   }
+  ],
+  "musculoskeletal": [
+   {
+    "accession": "OSD-52",
+    "title": "Expression data from SPHINX (SPaceflight of Huvec: an INtegrated eXperiment)",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Spaceflight Study",
+    "mission": "Expedition 25",
+    "program": "International Space Station (ISS)",
+    "summary": "Changes in the physical environment modulate cell responses and may lead to the impairment or even failure of tissue function as a result of mechanotransduction processes. It has been suggested that this situation occurs in some age-related diseases and some pathological conditions observed in space, such as cardiovasc",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-52"
+   },
+   {
+    "accession": "OSD-635",
+    "title": "Spaceflight effects on human vascular smooth muscle cell phenotype and function",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-17",
+    "program": "International Space Station (ISS)",
+    "summary": "The cardiovascular system is strongly impacted by the hazards of spaceflight. Astronauts spending steadily increasing lengths of time in microgravity are subject to cardiovascular deconditioning resulting in loss of vascular tone, reduced total blood volume, and diminished cardiac output. Appreciating the mechanisms by",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-635"
+   },
+   {
+    "accession": "OSD-342",
+    "title": "Targeting myostatin/activin A protects against skeletal muscle and bone loss during spaceflight",
+    "organism": "Mus musculus",
+    "human": false,
+    "material": "Plasma",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-19",
+    "program": "International Space Station (ISS)",
+    "summary": "Among the physiological consequences of extended spaceflight are loss of skeletal muscle and bone mass. One signaling pathway that plays an important role in maintaining muscle and bone homeostasis is that regulated by the secreted signaling proteins, myostatin (MSTN) and activin A. Here, we used both genetic and pharm",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-342"
+   },
+   {
+    "accession": "OSD-396",
+    "title": "Gene-metabolite networks associated with impediment of bone fracture repair in spaceflight",
+    "organism": "Mus musculus",
+    "human": false,
+    "material": "Callus     Not Available",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-10",
+    "program": "International Space Station (ISS)",
+    "summary": "Adverse effects of spaceflight on musculoskeletal health increase the risk of bone injury and impairment of fracture healing. Its yet elusive molecular comprehension warrants immediate attention, since space travel is becoming more frequent. Here we examined the effects of spaceflight on bone fracture healing using a 2",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-396"
+   }
+  ],
+  "sensorimotor": [
+   {
+    "accession": "OSD-816",
+    "title": "The ex vivo human translaminar autonomous system to study spaceflight associated neuro-ocular syndrome pathogenesis (Retina, RT-PCR and electroretinography)",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Right retina     Left retina",
+    "projectType": "Ground Study",
+    "summary": "Spaceflight-Associated Neuro-ocular Syndrome (SANS) is a significant unexplained adverse reaction to long-duration spaceflight. We employ an ex vivo translaminar autonomous system (TAS) to recreate a human ocular ground-based spaceflight analogue model to study SANS pathogenesis. To recapitulate the human SANS conditio",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-816"
+   },
+   {
+    "accession": "OSD-87",
+    "title": "Spaceflight effects on the mouse retina: Histological, gene expression and epigenetic changes after flight on STS-135",
+    "organism": "Mus musculus",
+    "human": false,
+    "material": "Retina",
+    "projectType": "Spaceflight study",
+    "mission": "STS-135",
+    "program": "Space Transportation System (STS)",
+    "summary": "We report the findings of an animal experiment onboard STS-135 investigating the molecular aspects of the impact of spaceflight on retinal biology by performing differential gene expression profiling between mice flown onboard STS-135 and their ground control counterparts.",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-87"
+   },
+   {
+    "accession": "OSD-397",
+    "title": "Illumina NGS RNA-seq and RRBS Sequencing on Spaceflight Mouse Retina",
+    "organism": "Mus musculus",
+    "human": false,
+    "material": "Right retina     Left retina",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-4",
+    "program": "International Space Station (ISS)",
+    "summary": "This study was under the umbrella of the NASA Rodent Research-1 project consortium. In this project, 16-week-old female C57 BL/6J mice were sent to International Space Station (ISS) in NASA's animal enclosure modules (AEM) and were kept inside ISS middeck for 37 days. We used transcrptomic and methylomic approaches to ",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-397"
+   },
+   {
+    "accession": "OSD-715",
+    "title": "Characterization of mouse ocular response to a 35-day spaceflight mission: Evidence of blood-retinal barrier disruption and ocular adaptations - Proteomics data",
+    "organism": "Mus musculus",
+    "human": false,
+    "material": "Right retina",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-12",
+    "program": "Rodent Research (RR)",
+    "summary": "The health risks associated with spaceflight-induced ocular structural and functional damage has become a recent concern for NASA. The goal of the present study was to characterize the effects of spaceflight and reentry to 1 g on the structure and integrity of the retina and blood-retinal barrier (BRB) in the eye. To i",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-715"
+   }
+  ],
+  "mind": [
+   {
+    "accession": "OSD-1008",
+    "title": "Proteomic dataset of MECP2-deficient and wild-type human brain organoids under spaceflight and ground conditions",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells, Cultured",
+    "projectType": "Spaceflight Study",
+    "summary": "This dataset contains mass spectrometry-based proteomic profiles of human brain organoids cultured on Earth for 30 days, then maintained aboard the International Space Station (ISS) for an additional 30 days, with matched ground controls that remained on Earth for the equivalent duration. Brain organoids were derived f",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-1008"
+   },
+   {
+    "accession": "OSD-941",
+    "title": "Spaceflight reshapes Alzheimer's disease–associated molecular programs in human brain organoids",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells, Cultured",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-30",
+    "program": "International Space Station (ISS)",
+    "summary": "Spaceflight provides a unique environment to study neural responses relevant to neurodegenerative diseases. Here, human cortical organoids derived from induced pluripotent stem cells (iPSCs) that carry familial Alzheimer's disease (fAD) mutations in APP (p.V717G), PSEN1 (p.M233L), and PSEN2 (p.N141I) were cultivated at",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-941"
+   },
+   {
+    "accession": "OSD-635",
+    "title": "Spaceflight effects on human vascular smooth muscle cell phenotype and function",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-17",
+    "program": "International Space Station (ISS)",
+    "summary": "The cardiovascular system is strongly impacted by the hazards of spaceflight. Astronauts spending steadily increasing lengths of time in microgravity are subject to cardiovascular deconditioning resulting in loss of vascular tone, reduced total blood volume, and diminished cardiac output. Appreciating the mechanisms by",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-635"
+   },
+   {
+    "accession": "OSD-698",
+    "title": "Spaceflight-Induced Gene Expression Profiles in the Mouse Brain Are Attenuated by Treatment with the Antioxidant BuOE - Frontal Cortex",
+    "organism": "Mus musculus",
+    "human": false,
+    "material": "frontal cortex",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-24",
+    "program": "International Space Station (ISS)",
+    "summary": "The demands of deep space pose a health risk to the central nervous system that has long been a concern when sending humans to space. While little is known about how spaceflight affects transcription spatially in the brain, a greater understanding of this process has the potential to aid strategies that mitigate the ef",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-698"
+   }
+  ],
+  "sleep": [
+   {
+    "accession": "OSD-195",
+    "title": "Effects of 21 days of bedrest on human skeletal muscle gene expression",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Vastus Lateralis",
+    "projectType": "Ground Study",
+    "summary": "The present study concerns the effects of 21 days of sustained recumbence (bedrest) on skeletal muscle gene expression. 14 male subjects participated in normoxic bedrest (NBR) with muscle unloading, for 21 days, this is a substudy of tha PlanHab-study which apart from normoxic bedrest also involved hypoxic bedrest and ",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-195"
+   },
+   {
+    "accession": "OSD-540",
+    "title": "Ten-day human unilateral lower limb suspension and active recovery in young healthy men",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Vastus Lateralis",
+    "projectType": "Ground Study",
+    "summary": "Electrophysiological alterations of the neuromuscular junction (NMJ) and motor unit potential (MUP) with unloading are poorly studied. We aimed to investigate these aspects and the underlying molecular mechanisms with short-term unloading and active recovery (AR). Eleven healthy males underwent a 10-day unilateral lowe",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-540"
+   },
+   {
+    "accession": "OSD-63",
+    "title": "Transcription profiling of rat response to changes in developmental stage - 3 types of tissue, 3 gravity conditions, 2 developmental conditions",
+    "organism": "Rattus norvegicus",
+    "human": false,
+    "projectType": "Spaceflight Study",
+    "mission": "STS-70",
+    "program": "Space Transportation System (STS)",
+    "summary": "Transcriptional crosstalk between mammary gland, liver and adipose tissue Experiment Overall Design: Pregnant and Lactating rats exposed to 3 gravity conditions",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-63"
+   },
+   {
+    "accession": "OSD-343",
+    "title": "Comprehensive multi-omics analysis reveals mitochondrial stress as a central biological hub for spaceflight impact",
+    "organism": "Mus musculus",
+    "human": false,
+    "material": "Gastrocnemius     Quadriceps femoris",
+    "projectType": "Spaceflight Study",
+    "mission": "SpaceX-12",
+    "program": "International Space Station (ISS)",
+    "summary": "Given the limited knowledge of the biological impact of spaceflight, a multi-omics, systems biology approach was used to investigate NASA’s GeneLab data and astronaut biomedical profiles. These data consist of hundreds of samples flown in space, human metrics from 59 astronauts, and confirmatory data from NASA’s Twin S",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-343"
+   }
+  ],
+  "metabolic": [
+   {
+    "accession": "OSD-370",
+    "title": "Insulin resistance induced by physical inactivity is associated with multiple transcriptional changes in skeletal muscle in young men",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Vastus Lateralis",
+    "projectType": "Ground Study",
+    "summary": "Physical inactivity is a risk factor for insulin resistance. We examined the effect of nine days of bed rest on basal and insulin stimulated expression of genes potentially involved in insulin action by applying hypothesis-generating microarray in parallel with candidate gene real-time PCR approaches in 20 healthy, you",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-370"
+   },
+   {
+    "accession": "OSD-258",
+    "title": "Effects of Spaceflight on Human Induced Pluripotent Stem Cell-Derived Cardiomyocyte Structure and Function",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Spaceflight Study",
+    "summary": "With extended stays aboard the International Space Station (ISS) becoming commonplace, there is a need to better understand the effects of microgravity on cardiac function. We utilized human induced pluripotent stem cell-derived cardiomyocytes (hiPSC-CMs) to study the effects of microgravity on cell-level cardiac funct",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-258"
+   },
+   {
+    "accession": "OSD-149",
+    "title": "Comparison of gene expression profiles of normal human bronchial epithelial cells in 2D and 3D cultural conditions",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "bronchial epithelial cell",
+    "projectType": "Ground Study",
+    "summary": "The experiment is part of a project to study DNA repair process after ionizing radiation in organotypic 3-dimentional human bronchial epithlial cell culture. Human bronchial epithelial cells were grown in tissue culture flask (2D) or in matrics gel (3D). Three independent cultures were done for each condition.",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-149"
+   },
+   {
+    "accession": "OSD-124",
+    "title": "Effect of electromagnetic fields on the chondrogenic differentiation under microgravity conditions",
+    "organism": "Homo sapiens",
+    "human": true,
+    "projectType": "Ground Study",
+    "summary": "A combination therapy of electromagnetic fields (EMF) and simulated microgravity (SMG) has not been examined in regenerative medicine of cartilage. In the present study, a bioreactor system using extremely low-frequency EMF and SMG was applied during the chondrogenic differentiation of human mesenchymal stem cells (hMS",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-124"
+   }
+  ],
+  "immune": [
+   {
+    "accession": "OSD-943",
+    "title": "Longitudinal transcriptomic and epigenetic analysis in astronauts reveals dynamic immune response to spaceflight",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Whole Blood",
+    "projectType": "Spaceflight Study",
+    "mission": "AX-1",
+    "summary": "The space industry has made significant strides, leading to an era of commercial spaceflight. Meanwhile, understanding molecular responses to spaceflight is crucial for astronauts' safety. To this end, we examined transcriptomic and epigenetic changes in two astronauts' blood samples at three timepoints: two weeks befo",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-943"
+   },
+   {
+    "accession": "OSD-903",
+    "title": "Longitudinal transcriptomic and epigenetic analysis in astronauts reveals dynamic immune response to spaceflight",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Whole Blood",
+    "projectType": "Spaceflight Study",
+    "mission": "AX-1",
+    "summary": "The space industry has made significant strides, leading to an era of commercial spaceflight. Meanwhile, understanding molecular responses to spaceflight is crucial for astronauts' safety. To this end, we examined transcriptomic and epigenetic changes in two astronauts' blood samples at three timepoints: two weeks befo",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-903"
+   },
+   {
+    "accession": "OSD-54",
+    "title": "Immune responses to the in vitro LPS assault engineered in the spaceflight multi-omics study",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells     reference RNA",
+    "projectType": "Spaceflight Study",
+    "mission": "STS-135",
+    "program": "Space Transportation System (STS)",
+    "summary": "Microgravity alters the immune response to in vitro LPS assault engineered in spaceflight: A multi-omics study Microgravity can facilitate creation of a potent environment for opportunistic infection by augmenting virulence and suppressing the host defense. Presumably, extraterrestrial infection may trigger potentially",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-54"
+   },
+   {
+    "accession": "OSD-323",
+    "title": "Evaluating the effect of spaceflight on the host-pathogen interaction between human intestinal epithelial cells and Salmonella Typhimurium",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Spaceflight Study",
+    "mission": "STS-131",
+    "program": "NASA",
+    "summary": "Spaceflight uniquely alters the physiology of both human cells and microbial pathogens, stimulating cellular and molecular changes directly relevant to infectious disease. However, the influence of this environment on host-pathogen interactions remains poorly understood. Here we report our results from the STL-IMMUNE s",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-323"
+   }
+  ],
+  "radiation": [
+   {
+    "accession": "OSD-73",
+    "title": "Transcriptome Profiles in Normal Human Bronchial Epithelial Cells after Exposure to gamma-rays and different HZE particles",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Ground Study",
+    "summary": "Distinct transcriptome profiles in response to low-LET and high-LET, and different radiation qualities of HZE particles. Total RNA obtained from HBEC3KT cells after 1, 4, 12 and 24 hours of radiation. Mock-irradiated samples at each time point and control samples before radiation (0 hour) were also collected.",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-73"
+   },
+   {
+    "accession": "OSD-115",
+    "title": "Gene expression profiling in human fibroblast after low-LET irradiation",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Ground Study",
+    "summary": "Exposure to radiation provokes cellular responses controlled in part by gene expression networks. MicroRNAs (miRNAs) are small non-coding RNAs which mostly regulate gene expression by degrading the messages or inhibiting translation. Here, we investigated changes in miRNA expression patterns after low (0.1 Gy) and high",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-115"
+   },
+   {
+    "accession": "OSD-1014",
+    "title": "Distinct molecular responses of human intestinal organoids to proton and photon radiation.",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells, Cultured",
+    "projectType": "Ground Study",
+    "summary": "Radiation exposure impairs rapidly renewing tissues like the intestinal epithelium, yet translational insights from murine models have been limited by species-specific responses. Here, we use human intestinal organoids (HIOs) derived from jejunal epithelium to evaluate human epithelial responses to low-dose proton and ",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-1014"
+   },
+   {
+    "accession": "OSD-317",
+    "title": "Galactic cosmic radiation induces stable epigenome alterations relevant to human lung cancer",
+    "organism": "Homo sapiens",
+    "human": true,
+    "material": "Cells",
+    "projectType": "Ground Study",
+    "summary": "Human deep space and planetary travel is limited by uncertainties regarding the health risks associated with exposure to galactic cosmic radiation (GCR), and in particular the high linear energy transfer (LET), heavy ion component. Here we assessed the impact of two high-LET ions 56Fe and 28Si, and low-LET X rays on ge",
+    "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-317"
+   }
+  ]
+ }
+}

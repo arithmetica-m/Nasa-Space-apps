@@ -1,0 +1,49 @@
+import { palette } from '../lib/theme';
+
+// A stylised centaur drawn as a constellation, in the spirit of Centaurus.
+// Decorative: the star positions are not astronomically exact.
+const STARS: [number, number][] = [
+  [24, 82], [46, 74], [86, 70], [124, 72], [138, 50], [142, 22], [148, 12],
+  [164, 40], [182, 28], [44, 104], [36, 132], [70, 106], [64, 132],
+  [112, 100], [106, 132], [128, 98], [134, 130],
+];
+const EDGES: [number, number][] = [
+  [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [4, 7], [7, 8],
+  [1, 9], [9, 10], [2, 11], [11, 12], [3, 13], [13, 14], [3, 15], [15, 16],
+];
+
+export function CentaurConstellation({ draw = false, className = '' }: { draw?: boolean; className?: string }) {
+  return (
+    <svg viewBox="0 0 200 140" className={className} aria-hidden>
+      {EDGES.map(([a, b], i) => (
+        <line key={i} x1={STARS[a][0]} y1={STARS[a][1]} x2={STARS[b][0]} y2={STARS[b][1]}
+          stroke={palette.gold} strokeOpacity={0.55} strokeWidth={0.8} pathLength={1}
+          className={draw ? 'draw-line' : undefined} style={draw ? { animationDelay: `${0.15 + i * 0.07}s` } : undefined} />
+      ))}
+      {STARS.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r={i === 6 ? 2.2 : 1.5} fill={palette.marble}
+          className={draw ? 'fade-in' : undefined} style={draw ? { animationDelay: `${i * 0.05}s` } : undefined} />
+      ))}
+    </svg>
+  );
+}
+
+// Thin Greek-key (meander) band used as a divider.
+export function GreekKey({ width = 240, className = '' }: { width?: number; className?: string }) {
+  const unit = 12;
+  const n = Math.floor(width / unit);
+  const d = Array.from({ length: n }, (_, i) => {
+    const x = i * unit;
+    return `M${x} 10 V2 H${x + 9} V7 H${x + 4} V5`;
+  }).join(' ');
+  return (
+    <svg viewBox={`0 0 ${n * unit} 12`} width={n * unit} height={12} className={className} aria-hidden>
+      <path d={d} fill="none" stroke={palette.gold} strokeOpacity={0.5} strokeWidth={0.8} />
+      <line x1={0} y1={11.5} x2={n * unit} y2={11.5} stroke={palette.gold} strokeOpacity={0.35} strokeWidth={0.6} />
+    </svg>
+  );
+}
+
+export function ChironSymbol({ className = '' }: { className?: string }) {
+  return <span className={`font-serif leading-none ${className}`} style={{ color: palette.gold }} aria-hidden>⚷</span>;
+}
