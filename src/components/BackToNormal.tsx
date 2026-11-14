@@ -71,10 +71,17 @@ export function BackToNormal({ crewId, name, records, isSelf, eva, activity, onH
 
       {plans.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-marble/10 pt-3 text-base">
-          {plans.map((p) => {
-            const pr = progress[p.id];
-            return <span key={p.id} className="text-marble/80">{p.title}: <span className={pr.reached || pr.onTrack ? 'text-[#7bd5b8]' : 'text-[#f3c28d]'}>{pr.reached ? 'back to normal' : pr.onTrack ? 'getting better' : 'not improving yet'}</span></span>;
-          })}
+          {(() => {
+            const better = plans.filter((p) => progress[p.id].reached || progress[p.id].onTrack);
+            const stuck = plans.filter((p) => !progress[p.id].reached && !progress[p.id].onTrack);
+            const names = (xs: typeof plans) => xs.slice(0, 2).map((p) => p.title.toLowerCase()).join(', ') + (xs.length > 2 ? ` +${xs.length - 2} more` : '');
+            return (
+              <>
+                {better.length > 0 && <span className="text-[#7bd5b8]">Getting better: {names(better)}</span>}
+                {stuck.length > 0 && <span className="text-[#f3c28d]">Not improving yet: {names(stuck)}</span>}
+              </>
+            );
+          })()}
           <button type="button" onClick={onHistory} className="min-h-10 font-mono text-xs tracking-[0.15em] text-gold hover:text-marble">TIMELINES →</button>
         </div>
       )}

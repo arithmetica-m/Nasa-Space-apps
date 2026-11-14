@@ -87,7 +87,7 @@ export function ProfilePage(p: Props) {
             checkedIn={p.checkedIn} onCheckIn={p.onCheckIn} />
           <HealthSupport key={p.member.id} astronautId={p.member.id} astronautName={p.member.name}
             records={p.records} symptoms={p.symptoms} isSelf={isSelf} onAddReadings={p.onCheckIn}
-            onReading={p.onReading} onReport={(part) => setReporting({ part })} />
+            onReading={p.onReading} onReport={(part) => setReporting({ part })} linkWarnings={p.link.warnings} />
         </>
       )}
 

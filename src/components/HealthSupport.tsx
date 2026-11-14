@@ -9,6 +9,7 @@ import { latestValue } from '../lib/health';
 import { Explained } from './Explained';
 import { BODY_REPORT_EVENT } from './ReportSomething';
 import type { BodyPart } from '../triage/symptomCheck';
+import type { LinkWarning } from '../link/link';
 
 const bodyImageUrl = new URL('../../body.png', import.meta.url).href;
 
@@ -79,9 +80,17 @@ interface Props {
   onAddReadings: () => void;
   onReading: (values: Record<string, number>) => void;
   onReport: (part?: BodyPart) => void;
+  linkWarnings?: LinkWarning[];
 }
 
-export function HealthSupport({ astronautId, astronautName, records, symptoms, isSelf, onAddReadings, onReading, onReport }: Props) {
+// Where a wearable warning belongs on the body, and which library advice explains it.
+const LINK_REGION: Record<string, { region: RegionId; reading: string; what: string }> = {
+  spo2: { region: 'lungs', reading: 'spo2', what: 'How much oxygen your blood is carrying, measured by your LINK band.' },
+  hr: { region: 'heart', reading: 'hr', what: 'How fast your heart is beating, measured by your LINK band.' },
+  skin: { region: 'whole', reading: 'temp', what: 'The temperature of your skin, measured by your LINK band.' },
+};
+
+export function HealthSupport({ astronautId, astronautName, records, symptoms, isSelf, onAddReadings, onReading, onReport, linkWarnings = [] }: Props) {
   const [selected, setSelected] = useState<RegionId>();
   const [open, setOpen] = useState<string>();
   const [reports, setReports] = useLocal<Report[]>(`chiron-body-reports-v1-${astronautId}`, []);
@@ -109,12 +118,20 @@ export function HealthSupport({ astronautId, astronautName, records, symptoms, i
       const m = symptomMeaning[s];
       if (m) out.push({ key: `sym-${s}`, region: SYMPTOM_REGION[s] ?? 'whole', title: s, detail: 'From today’s check-in', e: { name: s, direction: 'high', what: '', means: m.what, todo: m.todo, topic: { symptom: s } } });
     }
+    for (const w of linkWarnings) {
+      const place = LINK_REGION[w.key];
+      if (!place) continue;
+      const low = w.key === 'spo2' || (w.key === 'hr' && w.value < 40);
+      out.unshift({ key: `link-${w.key}`, region: place.region, title: `${w.label} · LINK warning`, detail: `${w.value}${w.unit === '%' ? '%' : ` ${w.unit}`} now · rule: ${w.rule}`,
+        e: { name: w.label, direction: low ? 'low' : 'high', what: place.what, topic: { reading: place.reading, direction: low ? 'low' : 'high' },
+          evidence: { value: `${w.value} ${w.unit}`, when: new Date(w.t).toISOString().slice(11, 16) + ' GMT', source: 'CHIRON LINK wearable · SIMULATED', normal: `prototype warning rule: ${w.rule}` } } });
+    }
     reports.slice(-8).forEach((r, i) => {
       const region = (r.region in REGIONS ? r.region : 'whole') as RegionId;
       out.push({ key: `rep-${i}`, region, title: r.note, detail: `You reported this · ${new Date(r.at).toLocaleDateString()}`, e: reportExplanation(r.note) });
     });
     return out;
-  }, [records, symptoms, reports]);
+  }, [records, symptoms, reports, linkWarnings]);
 
   const count = (r: RegionId) => problems.filter((p) => p.region === r).length;
   const flagged = (Object.keys(REGIONS) as RegionId[]).filter((r) => count(r) > 0);

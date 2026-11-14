@@ -98,7 +98,7 @@ function milestoneInsight(mission: Mission): Insight | undefined {
   return {
     id: `milestone-${next.day}`,
     evidence: ['mission'],
-    title: days === 0 ? `${next.title} is today` : `${days} days until ${next.title.toLowerCase()}`,
+    title: days === 0 ? `${next.title} is today` : `${days} days until ${next.title}`,
     why: next.health,
     science: {
       facts: [{ label: 'Mission day', value: `${next.day} of ${mission.totalDays}` }],

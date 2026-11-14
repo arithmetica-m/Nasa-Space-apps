@@ -69,7 +69,7 @@ export function Today({ mission, records, checkedIn, onCheckIn, onTeach, onEmerg
       <h2 className="mt-2 font-serif text-2xl tracking-[0.08em] text-marble">{greeting}, {name}</h2>
       <p className="mt-1 text-sm text-marble/70">
         {attention
-          ? `Since day ${since}, some simulated readings differ from this demo baseline.`
+          ? `Some readings have been off your normal since day ${since}.`
           : missingDailyReadings
             ? `No change flagged in available demo readings; ${missingDailyReadings} daily measures are unavailable. Missing readings are not an all-clear.`
             : 'No change flagged in the available simulated readings. This is not a medical clearance.'}
