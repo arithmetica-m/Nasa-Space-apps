@@ -17,9 +17,9 @@ Then open the address Vite prints (usually http://localhost:5173).
 
 ## Emergencies on several devices
 
-Each device is signed in as one crew member ("Signed in as" on the Watch screen). In an emergency each person sees only their own tasks; everyone else appears as live status. Everything (steps, answers, missing equipment, vitals, crew availability, Earth messages) is an event in a shared log, so all devices show the same picture and the plan adapts as things change.
+Mission choice and sign-in happen once, the first time CHIRON opens on a device, and are remembered. To switch crew member for a demo, use the settings button (top right). In an emergency each person sees only their own tasks; everyone else appears as live status. Everything (steps, answers, missing equipment, vitals, crew availability, Earth messages) is an event in a shared log, so all devices show the same picture and the plan adapts as things change.
 
-- **Same computer:** open two browser tabs, sign each in as a different crew member. They sync automatically.
+- **Same computer:** open two browser tabs, switch one of them to a different crew member in settings. They sync automatically.
 - **Several devices on one network** (phones, tablets):
 
 ```bash
@@ -48,6 +48,23 @@ npm run fetch-research
 | Source | Used for | Notes |
 | --- | --- | --- |
 | NASA OSDR | "The science behind this" in astronaut health explanations | Studies are labelled by participant/model type and curated by health system. The app's readings and baselines remain simulated. |
+
+## How CHIRON is organised
+
+- **CHIRON CORE** (home): who is on board, how each person is doing (with their CHIRON LINK wearable status), and three doors: **MY HEALTH** (your own dashboard), **PREPARE** (prevent and train: the readiness simulation finds gaps and turns them into practice and actions) and **RESPOND** (emergencies, protocols, medical stock). The mission timeline is clickable and zooms into each stage.
+- **Astronaut dashboard**: Health overview (LINK readings, check-in, **Back to your normal** recovery plan built from the person's readings and day schedule, labelled body map), Health history (health line, medical record of the mission) and Mission information, on separate tabs. Personal data appears only on a person's own dashboard.
+- **Emergency mode**: one step at a time, required measurements (from LINK or by hand), crew roles with reasons (the crew can change them), handover summary, automatic private reports to Earth.
+- **How CHIRON got here**: an optional button under every recommendation, status and plan, showing the data, protocol, resources and logic used. Useful for checking and for training.
+- **Levels**: Level 1 works now; Level 2 (LINK wearables, readiness simulation, task suggestions, handover, stock planning, training recommendations, mission medical record) runs on simulated inputs; Level 3 (wearable hardware, CHIRON VISION AR) is concept only. See "About CHIRON and roadmap" in the settings menu.
+
+## Medical library
+
+CHIRON's advice comes from the mission medical library (`src/library/entries.ts`), never from free text generation. Each entry has: what is going on, what to do now, warning signs that mean "start an emergency", extra advice for certain medical histories, onboard equipment, the reasoning, and the NASA sources it is based on. CHIRON matches a reading or symptom to an entry and fits it to the person's medical record (allergies, history, medications) and to who can help them.
+
+- **On board** the library is read-only: open it with LIBRARY on the home screen.
+- **Mission Control** changes it: open the app with `?earth` at the end of the address, edit an entry and release it. Every crew device gets the new version through the shared log, and the change history is kept. (Prototype: no real Mission Control sign-in.)
+
+Library content is written for this prototype from public NASA material and contains no medicine doses. A real mission would load its approved medical checklist instead.
 
 ## Where things are
 

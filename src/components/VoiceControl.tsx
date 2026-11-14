@@ -1,3 +1,4 @@
+import { VOICE_HELP as COMMAND_HELP } from '../lib/voiceCommands';
 import { useEffect, useRef, useState } from 'react';
 
 interface SpeechResult extends ArrayLike<{ transcript: string }> {
@@ -29,10 +30,10 @@ interface RecognitionConstructor {
   new(): Recognition;
 }
 
-const COMMAND_HELP = 'Voice commands: “open my health profile”, “open Ana’s profile”, “show crew status”, “open daily check-in”, “next step”, “open emergency response”, or “show available medical equipment”.';
 export const NEXT_STEP_EVENT = 'chiron-next-step';
 const speechListeners = new Set<(speaking: boolean) => void>();
 let speaking = false;
+let speakingTimer: number | undefined;
 
 function setSpeaking(next: boolean) {
   speaking = next;
@@ -67,9 +68,8 @@ export function useVoiceControl(onCommand: (text: string) => void) {
   }, []);
 
   useEffect(() => {
-    setMessage(supported
-      ? `${COMMAND_HELP} Speech recognition may use your browser’s service; do not speak private medical details.`
-      : 'Voice commands are unavailable in this browser. Use the touch controls.');
+    // The command list appears only while listening, so the home page stays quiet.
+    if (!supported) setMessage('Voice commands are unavailable in this browser. Use the touch controls.');
     return () => {
       active.current = false;
       window.clearTimeout(restartTimer.current);
@@ -105,7 +105,7 @@ export function useVoiceControl(onCommand: (text: string) => void) {
         'service-not-allowed': 'Speech recognition is blocked by the browser. Touch controls remain available.',
         'audio-capture': 'No microphone was found. Touch controls remain available.',
         'no-speech': 'No speech detected. Still listening…',
-        network: 'Speech recognition service is unavailable. Touch Voice to try again.',
+        network: 'Voice needs the browser’s online speech service, which is not reachable here. Try Chrome, or use the touch controls.',
       };
       setMessage(errors[event.error] ?? `Voice recognition error (${event.error}). Touch Voice to try again.`);
       if (event.error !== 'no-speech') {
@@ -127,7 +127,7 @@ export function useVoiceControl(onCommand: (text: string) => void) {
     try {
       activeRecognition.start();
       setListening(true);
-      setMessage('Listening continuously… Say a command or tap Voice to stop.');
+      setMessage(`Listening. ${COMMAND_HELP}`);
     } catch (error) {
       active.current = false;
       setListening(false);
@@ -162,6 +162,9 @@ export function speak(text: string) {
   utterance.onstart = () => setSpeaking(true);
   utterance.onend = () => setSpeaking(false);
   utterance.onerror = () => setSpeaking(false);
+  // Some browsers never fire onend. Without this, every later voice command would be ignored.
+  window.clearTimeout(speakingTimer);
+  speakingTimer = window.setTimeout(() => setSpeaking(false), 1500 + text.length * 90);
   window.speechSynthesis.speak(utterance);
   return true;
 }
@@ -169,4 +172,28 @@ export function speak(text: string) {
 export function stopSpeaking() {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
   setSpeaking(false);
+}
+
+// Listens for one phrase (for example a reading: "seventy two") and hands back the text.
+export function listenOnce(onText: (text: string) => void, onError: (message: string) => void) {
+  const Api = typeof window !== 'undefined' ? window.SpeechRecognition ?? window.webkitSpeechRecognition : undefined;
+  if (!Api) { onError('Voice entry is not available in this browser. Type the number instead.'); return () => {}; }
+  const r = new Api();
+  r.lang = 'en-US';
+  r.continuous = false;
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+  let got = false;
+  let failed = false;
+  const fail = (m: string) => { if (!failed && !got) { failed = true; onError(m); } };
+  r.onresult = (event) => {
+    const t = event.results[0]?.[0]?.transcript?.trim();
+    if (t) { got = true; onText(t); }
+  };
+  r.onerror = (event) => fail(event.error === 'not-allowed' ? 'Allow the microphone to enter readings by voice.'
+    : event.error === 'network' ? 'Voice needs the browser’s online speech service, which is not reachable here. Type the number instead.'
+      : 'I did not catch that. Try again or type the number.');
+  r.onend = () => fail('I did not catch that. Try again or type the number.');
+  try { r.start(); } catch { fail('Could not start the microphone.'); }
+  return () => r.stop();
 }

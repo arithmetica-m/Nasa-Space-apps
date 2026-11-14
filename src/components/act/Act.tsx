@@ -10,10 +10,10 @@ import { Response } from './Response';
 import { Behavioral } from './Behavioral';
 
 const CATEGORIES: { id: Category; label: string; hint: string; icon: typeof Siren }[] = [
-  { id: 'dcs', label: 'Pressure or EVA problem', hint: 'Joint pain, numbness or tingling after an EVA', icon: Gauge },
-  { id: 'respiratory', label: 'Breathing difficulty', hint: 'A crew member reports a breathing concern', icon: Wind },
+  { id: 'dcs', label: 'Decompression sickness after EVA', hint: 'Joint pain, numbness or tingling after an EVA', icon: Gauge },
+  { id: 'respiratory', label: 'Breathing or cabin air problem', hint: 'Short of breath, low oxygen, or a cabin air alarm', icon: Wind },
   { id: 'anaphylaxis', label: 'Severe allergic reaction', hint: 'Swelling, rash, trouble breathing after exposure', icon: ShieldAlert },
-  { id: 'behavioral', label: 'Panic, distress or confusion', hint: 'Private support. Physical causes are checked first.', icon: Brain },
+  { id: 'behavioral', label: 'Acute psychological distress', hint: 'Panic, distress or confusion. Private support; physical causes are checked first.', icon: Brain },
 ];
 
 interface Props {
@@ -22,12 +22,13 @@ interface Props {
   kb: Procedure[];
   account: string;
   joinEid?: string;
+  patient?: string;
   onLeave: () => void;
 }
 
 // ACT: takes over the screen. Starting an emergency publishes it to every crew device.
-export function Act({ mission, reason, kb, account, joinEid, onLeave }: Props) {
-  const [patient, setPatient] = useState(account);
+export function Act({ mission, reason, kb, account, joinEid, patient: initialPatient, onLeave }: Props) {
+  const [patient, setPatient] = useState(initialPatient ?? account);
   const [eid, setEid] = useState(joinEid);
   const [behavioral, setBehavioral] = useState(false);
 
@@ -38,16 +39,12 @@ export function Act({ mission, reason, kb, account, joinEid, onLeave }: Props) {
     if (category === 'behavioral') { setBehavioral(true); return; }
     const id = newId();
     const now = Date.now();
-    const delay = DELAY_MIN[mission.id] * 1000; // demo scale: 1 s per minute of signal travel
-    const who = crew.find((c) => c.id === patient)!.name;
-    const label = CATEGORIES.find((c) => c.id === category)!.label;
+    const delay = DELAY_MIN[mission.id] * 60_000; // real signal travel time each way
     publish({ type: 'start', eid: id, by: account, category, patientId: patient, mission: mission.id, reason });
-    publish({ type: 'message', eid: id, by: account, message: {
-      id: newId(), direction: 'out', authority: 'chiron', title: 'Initial emergency report',
-      body: `${label} · patient ${who} · ${mission.name} day ${mission.today}${reason ? ` · ${reason}` : ''}.`, sentAt: now, arrivesAt: now + delay } });
+    // The initial report to Earth is drafted and sent by the response screen (emergency/report.ts).
     publish({ type: 'message', eid: id, by: 'earth', message: {
       id: newId(), direction: 'in', authority: 'medical', title: 'Flight surgeon (SIMULATED for the demo)',
-      body: 'Report received. Continue the approved onboard procedure and send observations every 5 minutes.', sentAt: now + delay + 5000, arrivesAt: now + 2 * delay + 5000 } });
+      body: 'Report received. Continue the approved onboard procedure and send observations every 5 minutes.', sentAt: now + delay + 60_000, arrivesAt: now + 2 * delay + 60_000 } });
     setEid(id);
   };
 
@@ -63,7 +60,7 @@ export function Act({ mission, reason, kb, account, joinEid, onLeave }: Props) {
       </header>
 
       <div className="mx-auto w-full max-w-4xl p-6">
-        {reason && <p className="mb-4 border border-[#e45b5b]/50 bg-[#e45b5b]/10 p-3 text-sm text-marble">Started from today's check-in: {reason}.</p>}
+        {reason && <p className="mb-4 border border-[#e45b5b]/50 bg-[#e45b5b]/10 p-3 text-sm text-marble">Reason: {reason}.</p>}
         <div className="font-mono text-[10px] tracking-[0.3em] text-marble/60">AFFECTED CREW MEMBER</div>
         <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
           {crew.map((c) => (

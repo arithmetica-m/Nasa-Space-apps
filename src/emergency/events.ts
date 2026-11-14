@@ -1,5 +1,6 @@
 import type { MissionId } from '../types';
-import type { Category, EarthMessage, ItemStatus } from './types';
+import type { Category, EarthMessage, ItemStatus, RoleId } from './types';
+import type { LibraryEntry } from '../library/entries';
 
 // Everything that happens in an emergency is an event in one shared, append-only log.
 // Every device rebuilds the same picture from the same log, which also gives the
@@ -19,6 +20,19 @@ export type ChironEvent = Base & (
   | { type: 'support'; to: string; from: string }
   | { type: 'medical-access'; eid: string; patientId: string; reason: string }
   | { type: 'end'; eid: string }
+  // A new version of a medical library entry, released by Mission Control. Crew devices cannot send this.
+  | { type: 'library'; entry: LibraryEntry; note: string }
+  // A measurement recorded during an emergency (by hand, or taken from the patient's LINK wearable).
+  | { type: 'measure'; eid: string; key: string; value: string; source: 'manual' | 'link' }
+  // The crew changed who does a role (CHIRON's suggestion is only a suggestion).
+  | { type: 'assign'; eid: string; role: RoleId; crewId: string }
+  // The physical emergency button on a CHIRON LINK wearable was pressed.
+  | { type: 'sos'; crewId: string; location: string; readings: string; comms: boolean }
+  | { type: 'sos-clear'; sosId: string }
+  // A new reading from a CHIRON LINK wearable (simulated), sent to CORE.
+  | { type: 'link-reading'; crewId: string; key: 'hr' | 'spo2' | 'skin' | 'activity'; value: number }
+  // Back to the band's normal simulated readings.
+  | { type: 'link-clear'; crewId: string }
 );
 
 // Distributes Omit over the union, so each event kind keeps its own fields.

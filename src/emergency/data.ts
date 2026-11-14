@@ -8,13 +8,13 @@ import type { CrewMember, InventoryItem, Procedure } from './types';
 
 export const crew: CrewMember[] = [
   { id: 'ana', name: 'Ana Rocha', position: 'Flight engineer · Crew Medical Officer', qualifications: ['cmo', 'life-support', 'eva'], available: true,
-    medical: { allergies: ['Penicillin (simulated)'], conditions: [], notes: 'Baseline from pre-flight exam (simulated).' } },
+    medical: { allergies: ['Penicillin (simulated)'], conditions: [], history: ['Migraine, well controlled (simulated)'], notes: 'Baseline from pre-flight exam (simulated).' } },
   { id: 'lena', name: 'Lena Sørensen', position: 'Flight engineer · backup Crew Medical Officer', qualifications: ['cmo-backup', 'life-support', 'eva'], available: true,
-    medical: { allergies: [], conditions: [], notes: 'Baseline from pre-flight exam (simulated).' } },
+    medical: { allergies: [], conditions: [], history: ['Mild asthma in childhood (simulated)'], notes: 'Baseline from pre-flight exam (simulated).' } },
   { id: 'kai', name: 'Kai Mensah', position: 'Commander', qualifications: ['life-support', 'eva', 'comms'], available: true,
-    medical: { allergies: ['Latex (simulated)'], conditions: [], notes: 'Baseline from pre-flight exam (simulated).' } },
+    medical: { allergies: ['Latex (simulated)'], conditions: [], history: ['Kidney stone, 2019 (simulated)'], notes: 'Baseline from pre-flight exam (simulated).' } },
   { id: 'ravi', name: 'Ravi Iyer', position: 'Mission specialist', qualifications: ['life-support', 'comms', 'peer-support'], available: true,
-    medical: { allergies: [], conditions: [], notes: 'Baseline from pre-flight exam (simulated).' } },
+    medical: { allergies: [], conditions: [], history: ['Motion sickness during training (simulated)'], notes: 'Baseline from pre-flight exam (simulated).' } },
 ];
 
 const base: Omit<InventoryItem, 'log'>[] = [
@@ -43,7 +43,14 @@ const TRAINING_SCENARIO = { name: 'Hypothetical CHIRON training scenario · NASA
 
 export const procedures: Procedure[] = [
   {
-    id: 'TRAINING-DCS-01', title: 'Post-EVA health concern', category: 'dcs', version: '1.0', status: 'approved', source: TRAINING_SCENARIO,
+    id: 'TRAINING-DCS-01', title: 'Suspected decompression sickness after EVA', category: 'dcs', version: '1.0', status: 'approved', source: TRAINING_SCENARIO,
+    measurements: [
+      { key: 'symptoms', label: 'Symptoms and where they are (for example joint pain, tingling)', source: 'manual' },
+      { key: 'eva_end', label: 'Time the EVA ended', source: 'manual' },
+      { key: 'spo2', label: 'Blood oxygen', unit: '%', source: 'link' },
+      { key: 'hr', label: 'Heart rate', unit: 'bpm', source: 'link' },
+      { key: 'bp', label: 'Blood pressure', unit: 'mmHg', source: 'manual' },
+    ],
     missions: ['iss', 'moon', 'mars-surface'],
     equipment: [{ itemId: 'o2-mask', quantity: 1, alternatives: ['pba'] }, { itemId: 'pulse-ox', quantity: 1 }, { itemId: 'pressure', quantity: 1 }],
     qualifications: { lead: ['cmo', 'cmo-backup'], equipment: ['eva'] },
@@ -52,18 +59,24 @@ export const procedures: Procedure[] = [
       { id: 'dcs-02', role: 'lead', text: 'Record when the concern began and whether it followed an EVA.', why: 'Timing and recent activities provide context for the medical team.', ask: { question: 'Did the concern begin during or after an EVA?' }, after: ['dcs-01'], ifCannot: 'Record that the timing is unknown.' },
       { id: 'dcs-03', role: 'equipment', text: 'Bring the mission medical assessment kit to the response lead.', why: 'The lead can use mission-authorized instructions and equipment.', equipment: ['pulse-ox'], verify: 'confirm', ifCannot: 'Tell the response lead that the kit is unavailable.' },
       { id: 'dcs-04', role: 'monitor', after: ['dcs-01'], text: 'Record the crew member’s reported symptoms and any measurements requested by the medical lead.', why: 'The medical team needs a time-stamped record, not an automated interpretation.', verify: 'confirm', ifCannot: 'Record which information could not be collected.' },
-      { id: 'dcs-05', role: 'lead', after: ['dcs-02', 'dcs-03'], text: 'Consult the mission-authorized medical checklist and follow the medical lead’s instructions. Do not use CHIRON to choose treatment.', why: 'This hypothetical scenario does not replace mission-specific clinical protocols.', verify: 'clinical', ifCannot: 'Contact the flight surgeon for direction.' },
+      { id: 'dcs-05', role: 'lead', after: ['dcs-02', 'dcs-03'], text: 'Choose the treatment with the medical lead, using the mission medical checklist. If nobody knows what to do, follow the treatment steps in the CHIRON medical library.', why: 'Treatment is chosen by people, with CHIRON’s library as the guide when no one is sure.', verify: 'clinical', ifCannot: 'Contact the flight surgeon for direction.' },
       { id: 'dcs-06', role: 'earth', text: 'Send the event summary and recorded observations to the flight surgeon.', why: 'Mission Control medical staff need the crew’s report.', verify: 'confirm', ifCannot: 'Queue the report until the communication link returns.' },
     ],
     escalation: ['Symptoms worsen after treatment starts', 'Loss of consciousness or new weakness'],
     monitoring: ['Symptoms every 15 minutes (demo interval)', 'Oxygen saturation'],
   },
   {
-    id: 'TRAINING-DCS-01', title: 'Post-EVA health concern', category: 'dcs', version: '0.9', status: 'superseded', source: TRAINING_SCENARIO,
+    id: 'TRAINING-DCS-01', title: 'Suspected decompression sickness after EVA', category: 'dcs', version: '0.9', status: 'superseded', source: TRAINING_SCENARIO,
     missions: ['iss'], equipment: [], qualifications: {}, steps: [], escalation: [], monitoring: [],
   },
   {
-    id: 'TRAINING-RESP-02', title: 'Breathing difficulty', category: 'respiratory', version: '1.0', status: 'approved', source: TRAINING_SCENARIO,
+    id: 'TRAINING-RESP-02', title: 'Breathing difficulty or cabin air problem', category: 'respiratory', version: '1.0', status: 'approved', source: TRAINING_SCENARIO,
+    measurements: [
+      { key: 'spo2', label: 'Blood oxygen', unit: '%', source: 'link' },
+      { key: 'resp', label: 'Breathing rate', unit: 'breaths/min', source: 'manual' },
+      { key: 'hr', label: 'Heart rate', unit: 'bpm', source: 'link' },
+      { key: 'co2', label: 'Cabin CO₂ reading in this module', unit: 'mmHg', source: 'manual' },
+    ],
     missions: ['iss', 'moon', 'mars-transit', 'mars-surface'],
     equipment: [{ itemId: 'pulse-ox', quantity: 1 }],
     qualifications: { lead: ['cmo', 'cmo-backup'] },
@@ -71,14 +84,21 @@ export const procedures: Procedure[] = [
       { id: 'resp-01', role: 'lead', text: 'Confirm who is affected and ask them to describe the breathing concern.', why: 'A direct crew report gives the medical lead useful context.', ask: { question: 'Is the crew member able to speak comfortably?' }, ifCannot: 'Record that the crew member cannot provide a report and contact the medical lead.' },
       { id: 'resp-02', role: 'equipment', text: 'Bring the mission pulse oximeter to the response lead if requested.', why: 'The medical lead decides whether a measurement is needed.', equipment: ['pulse-ox'], verify: 'confirm', ifCannot: 'Tell the response lead the device is unavailable.' },
       { id: 'resp-03', role: 'monitor', after: ['resp-01'], text: 'Record the crew member’s report and any measurements requested by the medical lead.', why: 'Time-stamped observations help Mission Control follow the event.', verify: 'confirm', ifCannot: 'Record what could not be measured.' },
-      { id: 'resp-04', role: 'lead', after: ['resp-01', 'resp-02'], text: 'Consult the mission-authorized respiratory checklist and follow the medical lead’s instructions. CHIRON does not diagnose or prescribe treatment.', why: 'The demo scenario is not a clinical protocol.', verify: 'clinical', ifCannot: 'Contact the flight surgeon for direction.' },
+      { id: 'resp-04', role: 'lead', after: ['resp-01', 'resp-02'], text: 'Choose the treatment with the medical lead, using the respiratory checklist. If nobody knows what to do, follow the breathing steps in the CHIRON medical library.', why: 'Treatment is chosen by people, with CHIRON’s library as the guide when no one is sure.', verify: 'clinical', ifCannot: 'Contact the flight surgeon for direction.' },
       { id: 'resp-05', role: 'earth', text: 'Send the event summary and recorded observations to the flight surgeon.', why: 'Mission Control medical staff need the crew’s report.', verify: 'confirm', ifCannot: 'Queue the report until the communication link returns.' },
     ],
     escalation: ['The crew member reports a worsening condition', 'Additional crew request medical support'],
     monitoring: ['Record updates requested by the medical lead'],
   },
   {
-    id: 'TRAINING-ALLERGY-03', title: 'Possible allergic reaction', category: 'anaphylaxis', version: '1.0', status: 'approved', source: TRAINING_SCENARIO,
+    id: 'TRAINING-ALLERGY-03', title: 'Severe allergic reaction', category: 'anaphylaxis', version: '1.0', status: 'approved', source: TRAINING_SCENARIO,
+    measurements: [
+      { key: 'exposure', label: 'What they were exposed to, and when', source: 'manual' },
+      { key: 'swelling', label: 'Swelling or rash: where?', source: 'manual' },
+      { key: 'spo2', label: 'Blood oxygen', unit: '%', source: 'link' },
+      { key: 'hr', label: 'Heart rate', unit: 'bpm', source: 'link' },
+      { key: 'bp', label: 'Blood pressure', unit: 'mmHg', source: 'manual' },
+    ],
     missions: ['iss', 'moon', 'mars-transit', 'mars-surface'],
     equipment: [{ itemId: 'anaph-kit', quantity: 1 }, { itemId: 'pulse-ox', quantity: 1 }, { itemId: 'bp-monitor', quantity: 1 }],
     qualifications: { lead: ['cmo', 'cmo-backup'] },
@@ -94,7 +114,7 @@ export const procedures: Procedure[] = [
     monitoring: ['Breathing, pulse and skin every 5 minutes (demo interval)'],
   },
   {
-    id: 'TRAINING-SUPPORT-04', title: 'Crew distress or disorientation', category: 'behavioral', version: '1.0', status: 'approved', source: TRAINING_SCENARIO,
+    id: 'TRAINING-SUPPORT-04', title: 'Acute psychological distress', category: 'behavioral', version: '1.0', status: 'approved', source: TRAINING_SCENARIO,
     missions: ['iss', 'moon', 'mars-transit', 'mars-surface'],
     equipment: [{ itemId: 'bh-kit', quantity: 1 }], qualifications: {}, steps: [],
     escalation: ['Chest pain, fainting or trouble breathing: switch to a physical emergency', 'Confusion or unsafe behaviour', 'Any thought of self-harm'],

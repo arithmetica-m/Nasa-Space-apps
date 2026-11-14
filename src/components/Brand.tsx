@@ -31,3 +31,17 @@ export function CentaurConstellation({ draw = false, className = '' }: { draw?: 
 export function ChironSymbol({ className = '' }: { className?: string }) {
   return <span className={`font-serif leading-none ${className}`} style={{ color: palette.gold }} aria-hidden>⚷</span>;
 }
+
+// A thin Greek key (meander) border. Decorative only.
+export function GreekKey({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} aria-hidden preserveAspectRatio="none">
+      <defs>
+        <pattern id="meander" width="16" height="8" patternUnits="userSpaceOnUse">
+          <path d="M0 7.5 H12 V1 H4 V5 H8 V3" fill="none" stroke={palette.gold} strokeWidth="0.8" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="8" fill="url(#meander)" />
+    </svg>
+  );
+}

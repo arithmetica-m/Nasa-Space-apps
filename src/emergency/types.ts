@@ -77,7 +77,11 @@ export interface Procedure {
   steps: Step[];
   escalation: string[];
   monitoring: string[];
+  // What the medical team needs measured. 'link' = the patient's CHIRON LINK wearable can supply it.
+  measurements?: Measurement[];
 }
+
+export interface Measurement { key: string; label: string; unit?: string; source: 'link' | 'manual' }
 
 export type Authority = 'procedure' | 'medical' | 'chiron';
 export interface EarthMessage {
@@ -88,4 +92,6 @@ export interface EarthMessage {
   body: string;
   sentAt: number;
   arrivesAt: number;
+  // Set on CHIRON's automatic reports: update number and what had been recorded when it was sent.
+  report?: { n: number; sig: string };
 }

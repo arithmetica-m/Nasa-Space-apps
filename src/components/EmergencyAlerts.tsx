@@ -10,16 +10,18 @@ const severity = (category: string) => category === 'behavioral'
   ? { name: 'CREW SUPPORT · ACTION REQUIRED', color: '#e39b4b' }
   : { name: 'CREW EMERGENCY · ACTION REQUIRED', color: '#ff7070' };
 
-export function EmergencyAlerts({ mission, onJoin }: { mission: MissionId; onJoin: (eid: string) => void }) {
+// The device that reported the emergency is already on the response screen, so it is not alarmed again.
+// While the response screen is open, the reminder banner is hidden and the open emergency is not alarmed again.
+export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJoin }: { mission: MissionId; account: string; inResponse: boolean; viewingEid?: string; onJoin: (eid: string) => void }) {
   const log = useLog();
-  const cases = useMemo(() => casesFrom(log).filter((item) => !item.ended && item.mission === mission), [log, mission]);
+  const cases = useMemo(() => casesFrom(log).filter((item) => !item.ended && item.mission === mission && item.startedBy !== account), [log, mission, account]);
   const [acknowledged, setAcknowledged] = useState<Set<string>>(() => new Set());
   const [silenced, setSilenced] = useState<Set<string>>(() => new Set());
   const [audioError, setAudioError] = useState(false);
   const announced = useRef(new Set<string>());
   const audioContext = useRef<AudioContext>();
 
-  const newest = cases.find((item) => !acknowledged.has(item.eid));
+  const newest = cases.find((item) => !acknowledged.has(item.eid) && item.eid !== viewingEid);
 
   useEffect(() => {
     const newCases = cases.filter((item) => !announced.current.has(item.eid));
@@ -32,7 +34,7 @@ export function EmergencyAlerts({ mission, onJoin }: { mission: MissionId; onJoi
   }, [cases]);
 
   useEffect(() => {
-    const ringing = cases.filter((item) => !acknowledged.has(item.eid) && !silenced.has(item.eid));
+    const ringing = cases.filter((item) => !acknowledged.has(item.eid) && !silenced.has(item.eid) && item.eid !== viewingEid);
     if (!ringing.length) return;
     let interval: number | undefined;
     try {
@@ -61,7 +63,7 @@ export function EmergencyAlerts({ mission, onJoin }: { mission: MissionId; onJoi
       setAudioError(true);
     }
     return () => { if (interval !== undefined) window.clearInterval(interval); };
-  }, [cases, acknowledged, silenced]);
+  }, [cases, acknowledged, silenced, viewingEid]);
 
   useEffect(() => {
     const activeIds = new Set(cases.map((item) => item.eid));
@@ -75,7 +77,7 @@ export function EmergencyAlerts({ mission, onJoin }: { mission: MissionId; onJoi
 
   return (
     <>
-      {cases.filter((item) => acknowledged.has(item.eid)).map((item) => (
+      {!inResponse && cases.filter((item) => acknowledged.has(item.eid)).map((item) => (
         <div key={item.eid} className="fixed inset-x-3 bottom-20 z-[45] mx-auto flex max-w-3xl items-center gap-3 border border-[#ff7070]/60 bg-[#160c10]/95 px-4 py-3 shadow-xl backdrop-blur">
           <Siren size={18} className="shrink-0 animate-pulse text-[#ff8585]" />
           <div className="mr-auto min-w-0">

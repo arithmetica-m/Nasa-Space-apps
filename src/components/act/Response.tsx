@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, CircleDashed, Siren, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Check, CircleDashed, Satellite, Siren, ShieldCheck } from 'lucide-react';
+import { missions } from '../../data/missions';
+import { buildEarthReport, categoryText, reportSignature } from '../../emergency/report';
+import { recordsFor } from '../../lib/crewHealth';
+import { linkFor, withLinkEvents } from '../../link/link';
+import { Reasoning } from '../Reasoning';
+import { medicalOf } from '../../library/advice';
+import { CrewRoles, Handover, Measurements, PlannerOverview, measureStates, planReasoning } from './ResponseExtras';
+import { phaseOf } from '../MissionTimeline';
 import type { DemoMedicalProfile, Procedure, RoleId } from '../../emergency/types';
 import { DELAY_MIN, buildPlan, casesFrom, crewNow, roleName, rolesOf } from '../../emergency/plan';
 import { publish, useLog, useSyncStatus } from '../../emergency/sync';
@@ -7,12 +15,6 @@ import { newId } from '../../emergency/events';
 import { crew } from '../../emergency/data';
 import { NEXT_STEP_EVENT, speak } from '../VoiceControl';
 
-const categoryLabel = {
-  dcs: 'Pressure or EVA concern',
-  respiratory: 'Breathing difficulty',
-  anaphylaxis: 'Allergic reaction',
-  behavioral: 'Crew support',
-};
 
 function isDemoMedicalProfile(value: unknown): value is DemoMedicalProfile {
   if (typeof value !== 'object' || value === null) return false;
@@ -38,6 +40,9 @@ function localMedicalProfile(crewId: string): DemoMedicalProfile | undefined {
     return undefined;
   }
 }
+
+const UPDATE_EVERY_MIN = 5; // demo interval
+const hm = (t: number) => `${new Date(t).toISOString().slice(11, 16)} GMT`;
 
 interface Props {
   eid: string;
@@ -68,6 +73,45 @@ export function Response({ eid, kb, account, onLeave }: Props) {
     return () => window.removeEventListener(NEXT_STEP_EVENT, onNextStep);
   }, []);
 
+  // ---- Automatic reports to Earth ----
+  // The device that reported the emergency sends them. If it goes quiet for 6 minutes, any open device takes over.
+  const [now, setNow] = useState(Date.now());
+  const [reportOpen, setReportOpen] = useState(false);
+  const sentRef = useRef(new Set<number>()); // never send the same update number twice
+  const [handoverSeen, setHandoverSeen] = useState(false);
+  const [showHandover, setShowHandover] = useState(false);
+  // Every crew member's LINK band (simulated), for measurements, locations and task delivery.
+  const links = useMemo(() => (c ? Object.fromEntries(crew.map((m) => [m.id, withLinkEvents(linkFor(m.id, recordsFor(missions[c.mission], m.id), now), log)])) : {}), [c?.mission, now, log]);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
+  const reports = c ? c.messages.filter((m) => m.report) : [];
+  const lastReport = reports[reports.length - 1];
+  const sig = c ? reportSignature(c) : '';
+  const amSender = !!c && (account === c.startedBy || (!!lastReport && now - lastReport.sentAt > 6 * 60_000));
+  const sendReport = () => {
+    if (!c || !plan) return;
+    const medical = medicalOf(c.patientId);
+    const n = Math.max(0, ...reports.map((m) => m.report!.n)) + 1;
+    if (sentRef.current.has(n)) return;
+    sentRef.current.add(n);
+    const ms = measureStates(c, plan, links[c.patientId]);
+    const missing = ms.filter((s) => s.value === undefined).map((s) => s.m.label);
+    const live = ms.filter((s) => s.live).map((s) => `${hm(s.t!)} ${s.m.label}: ${s.value} (patient's LINK wearable, live, simulated)`);
+    const r = buildEarthReport(c, plan, missions[c.mission], medical, n, UPDATE_EVERY_MIN, missing, live);
+    const t = Date.now();
+    publish({ type: 'message', eid, by: account, message: { id: newId(), direction: 'out', authority: 'chiron', title: r.title, body: r.body, sentAt: t, arrivesAt: t + DELAY_MIN[c.mission] * 60_000, report: { n, sig } } });
+  };
+  useEffect(() => {
+    if (!c || !plan || !amSender) return;
+    if (!lastReport) { sendReport(); return; }
+    // Something new was recorded: send an update once things settle for a few seconds.
+    if (lastReport.report!.sig !== sig) { const t = setTimeout(sendReport, 8000); return () => clearTimeout(t); }
+    if (c.ended) return;
+    // Nothing new: still send a regular update so Earth knows the situation.
+    const t = setTimeout(sendReport, Math.max(0, lastReport.sentAt + UPDATE_EVERY_MIN * 60_000 - Date.now()));
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig, lastReport?.id, amSender, !!c, !!plan]);
+
   if (!c || !plan) return null;
   if (c.ended) {
     return (
@@ -90,6 +134,7 @@ export function Response({ eid, kb, account, onLeave }: Props) {
     history: patientRecord?.medical.history ?? patientRecord?.medical.conditions ?? [],
     baselineNotes: patientRecord?.medical.notes ?? '',
   };
+  const states = measureStates(c, plan, links[c.patientId]);
   const myRoles = rolesOf(plan.roles, account);
   const isPatient = c.patientId === account;
   const isLead = myRoles.includes('lead');
@@ -98,7 +143,6 @@ export function Response({ eid, kb, account, onLeave }: Props) {
   const activeTask = mine.find((task) => task.status === 'ready')
     ?? mine.find((task) => task.status === 'blocked')
     ?? mine.find((task) => task.status === 'waiting');
-  const latest = [...c.vitals].reverse()[0];
 
   const complete = (stepId: string, outcome: 'done' | 'cannot' | 'yes' | 'no') => {
     publish({ type: 'step', eid, by: account, stepId, outcome });
@@ -114,19 +158,6 @@ export function Response({ eid, kb, account, onLeave }: Props) {
     return activeTask ? 'waiting' : 'none';
   };
   advanceStepRef.current = advanceStep;
-  const reportStatus = () => {
-    const finished = plan.tasks.filter((task) => task.status === 'done').length;
-    const message = {
-      id: newId(),
-      direction: 'out' as const,
-      authority: 'chiron' as const,
-      title: 'Crew medical status update',
-      body: `${finished} of ${plan.tasks.length} scenario actions marked complete. ${latest?.note ? 'Crew observation recorded.' : 'No new crew observation recorded.'}`,
-      sentAt: Date.now(),
-      arrivesAt: Date.now() + DELAY_MIN[c.mission] * 60_000,
-    };
-    publish({ type: 'message', eid, by: account, message });
-  };
   const openMedicalRecord = () => {
     publish({ type: 'medical-access', eid, by: account, patientId: c.patientId, reason: accessReason });
     setMedicalAccessed(true);
@@ -138,73 +169,42 @@ export function Response({ eid, kb, account, onLeave }: Props) {
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-[#e45b5b]/50 bg-[#100c10]/95 px-4 py-4 backdrop-blur md:px-8">
         <Siren className="shrink-0 animate-pulse text-[#ff8585]" size={20} />
         <div className="mr-auto min-w-0">
-          <div className="font-mono text-[10px] tracking-[0.2em] text-[#ff8585]">EMERGENCY · {sync === 'relay' ? 'CREW CONNECTED' : 'LOCAL RESPONSE'}</div>
-          <h1 className="mt-1 truncate text-lg font-semibold text-marble md:text-xl">{plan.patient.name} · {categoryLabel[c.category]}</h1>
+          <div className="font-mono text-[10px] tracking-[0.2em] text-[#ff8585]">EMERGENCY · {plan.missing ? 'NO GUIDE: USE APPROVED PAPER INSTRUCTIONS' : 'TRAINING GUIDE'} · {sync === 'relay' ? 'CREW CONNECTED' : 'THIS DEVICE'}</div>
+          <h1 className="mt-1 truncate text-lg font-semibold text-marble md:text-xl">{plan.patient.name} · {categoryText[c.category]}</h1>
         </div>
         <button onClick={onLeave} className="flex min-h-11 items-center gap-2 border border-marble/25 px-3 text-xs text-marble/75 hover:border-marble/50"><ArrowLeft size={14} /> OVERVIEW</button>
         {isLead && <button onClick={() => publish({ type: 'end', eid, by: account })} className="min-h-11 border border-marble/40 px-4 text-xs text-marble hover:border-marble">CLOSE RESPONSE</button>}
       </header>
 
+      <section aria-label="Communication with Earth" className="border-b border-[#8fb8ff]/30 bg-[#8fb8ff]/[0.06] px-4 py-3 md:px-8">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3">
+          <Satellite size={20} className="shrink-0 text-[#8fb8ff]" />
+          <div className="mr-auto min-w-0">
+            <div className="font-mono text-[10px] tracking-[0.2em] text-[#8fb8ff]">EARTH IS BEING UPDATED AUTOMATICALLY · PRIVATE MEDICAL MESSAGE</div>
+            <div className="mt-0.5 text-sm text-marble">
+              {lastReport
+                ? `${lastReport.report!.n === 1 ? 'Initial report' : `Update ${lastReport.report!.n}`} sent ${lastReport.sentAt ? hm(lastReport.sentAt) : '(waiting for the link)'} · ${lastReport.arrivesAt <= now ? 'arrived' : (lastReport.arrivesAt - now < 60_000 ? 'arrives in seconds' : `arrives in ${Math.round((lastReport.arrivesAt - now) / 60_000)} min`)}`
+                : 'Drafting the first report…'}
+              <span className="text-marble/55"> · new update when anything changes, at least every {UPDATE_EVERY_MIN} min</span>
+            </div>
+            {(() => {
+              const reply = [...c.messages].reverse().find((m) => m.direction === 'in' && m.arrivesAt <= now);
+              return reply ? <div className="mt-1 text-sm text-[#bcd3ff]">Earth: {reply.body} <span className="text-marble/45">({reply.title})</span></div> : null;
+            })()}
+          </div>
+          {lastReport && <button type="button" onClick={() => setReportOpen(!reportOpen)} className="min-h-11 border border-[#8fb8ff]/50 px-3 font-mono text-[10px] tracking-[0.15em] text-[#bcd3ff] hover:bg-[#8fb8ff]/10">{reportOpen ? 'HIDE REPORT' : 'SEE WHAT WAS SENT'}</button>}
+          <button type="button" onClick={sendReport} className="min-h-11 border border-marble/25 px-3 font-mono text-[10px] tracking-[0.15em] text-marble/80 hover:border-marble/50">SEND UPDATE NOW</button>
+        </div>
+        {reportOpen && lastReport && (
+          <pre className="mx-auto mt-3 max-h-80 max-w-4xl overflow-y-auto whitespace-pre-wrap border border-marble/10 bg-void/70 p-3 font-sans text-sm leading-relaxed text-marble/85">{lastReport.body}</pre>
+        )}
+      </section>
+
       <main className="mx-auto w-full max-w-4xl flex-1 p-4 pb-10 md:p-8">
-        <section className="mb-4 border border-marble/10 bg-marble/[0.03] p-3">
-          <p className="text-xs font-mono tracking-wider text-marble/65">
-            {plan.missing ? 'NO GUIDE · USE APPROVED PAPER INSTRUCTIONS' : 'TRAINING GUIDE · FOLLOW APPROVED MISSION INSTRUCTIONS'}
-          </p>
-        </section>
-
         {plan.alerts[0] && <p role="alert" className="mb-4 border-l-4 border-[#e45b5b] bg-[#e45b5b]/10 px-4 py-3 text-lg font-medium text-marble">{plan.alerts[0]}</p>}
-        {(plan.warnings.length > 0 || plan.alerts.length > 1) && (
-          <details className="mb-4 border border-[#e39b4b]/40 p-3 text-sm text-[#f3c28d]">
-            <summary className="cursor-pointer">Important notes</summary>
-            <p className="mt-2">{[...plan.warnings, ...plan.alerts.slice(1)].join(' ')}</p>
-          </details>
-        )}
-
-        {!isPatient && isMedicalAccessAuthorized && (
-          <details className="mb-4 border border-[#e5c27b]/40 bg-[#e5c27b]/[0.04] p-4">
-            <summary className="cursor-pointer font-semibold text-[#e5c27b]">Emergency medical summary</summary>
-            <div className="font-mono text-[10px] tracking-[0.17em] text-[#e5c27b]">RESTRICTED · EMERGENCY ACCESS</div>
-            <h2 id="medical-record-access-title" className="mt-1 text-base font-semibold text-marble">Relevant medical summary · {plan.patient.name}</h2>
-            <p className="mt-1 text-xs text-marble/55">Visible only during this active response to the assigned response lead or designated medical crew role. Access is recorded in the shared event log. All example records are simulated. This prototype role-gating is not production security.</p>
-            <p className="mt-1 text-[10px] text-[#e5c27b]">{reviewedMedical ? `Demo-reviewed profile · v${reviewedMedical.version} · ${reviewedMedical.author} · ${reviewedMedical.reviewedAt ? new Date(reviewedMedical.reviewedAt).toLocaleString() : 'date unavailable'}` : localProfile?.status === 'draft' ? 'A local profile draft exists but is not shown as reviewed; displaying seeded demo data only.' : 'No demo-reviewed local profile; displaying seeded demo data only.'}</p>
-            {!medicalAccessed ? (
-              <div className="mt-3 flex flex-wrap items-end gap-3">
-                <label className="min-w-[220px] flex-1 text-xs text-marble/70">
-                  Reason for access
-                  <select value={accessReason} onChange={(event) => setAccessReason(event.target.value)} className="mt-1 min-h-11 w-full border border-marble/20 bg-[#080b11] px-3 text-sm text-marble">
-                    <option>Emergency assessment</option>
-                    <option>Check allergy or medication relevance</option>
-                    <option>Review medical restriction or history</option>
-                  </select>
-                </label>
-                <button type="button" onClick={openMedicalRecord} className="min-h-11 border border-[#e5c27b]/60 px-4 text-xs font-semibold tracking-wider text-[#e5c27b] hover:bg-[#e5c27b]/10">ACCESS & RECORD</button>
-              </div>
-            ) : (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {[
-                  ['Allergies', relevantMedical.allergies],
-                  ['Medications', relevantMedical.medications],
-                  ['Restrictions', relevantMedical.restrictions],
-                  ['Relevant history', relevantMedical.history],
-                ].map(([label, values]) => (
-                  <div key={String(label)} className="border border-marble/10 p-3">
-                    <div className="font-mono text-[9px] tracking-wider text-marble/45">{label}</div>
-                    <div className="mt-1 text-sm text-marble">{Array.isArray(values) && values.length ? values.join(', ') : 'None recorded in this demo profile'}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {medicalAccessEvents.length > 0 && (
-              <details className="mt-3 border-t border-marble/10 pt-2">
-                <summary className="cursor-pointer text-xs text-marble/60">Access audit · {medicalAccessEvents.length} event(s)</summary>
-                <ul className="mt-2 space-y-1 text-[11px] text-marble/55">
-                  {medicalAccessEvents.map((event) => event.type === 'medical-access' && <li key={event.id}>{new Date(event.t).toLocaleString()} · {crew.find((member) => member.id === event.by)?.name ?? event.by} · {event.reason}</li>)}
-                </ul>
-              </details>
-            )}
-          </details>
-        )}
-
+        {/* Someone took over the lead: show them where things stand first. */}
+        {c.assignments.lead?.crewId === account && !handoverSeen && <Handover c={c} plan={plan} states={states} onClose={() => setHandoverSeen(true)} />}
+        {!isPatient && <PlannerOverview c={c} plan={plan} states={states} links={links} phase={phaseOf(missions[c.mission])} />}
         {isPatient ? (
           <section className="border border-[#e45b5b]/40 bg-[#e45b5b]/[0.06] p-5 text-center md:p-8">
             <h2 className="text-2xl font-semibold text-marble">Your crew is helping you.</h2>
@@ -216,7 +216,7 @@ export function Response({ eid, kb, account, onLeave }: Props) {
           </section>
         ) : activeTask ? (
           <section aria-labelledby="assigned-steps-heading" className="mx-auto w-full max-w-3xl">
-            <div className="mb-3 font-mono text-[10px] tracking-[0.17em] text-[#ff8585]">YOUR NEXT STEP · {me?.name.toUpperCase()}</div>
+            <div className="mb-3 font-mono text-[10px] tracking-[0.17em] text-[#ff8585]">YOUR STEP {Math.min(mine.filter((task) => task.status === 'done' || task.status === 'cannot').length + 1, mine.length)} OF {mine.length} · {me?.name.toUpperCase()}</div>
             <div aria-live="polite" className={`min-h-64 border p-6 md:p-10 ${activeTask.status === 'blocked' ? 'border-[#e39b4b]/60 bg-[#e39b4b]/[0.06]' : 'border-[#e45b5b]/40 bg-[#101721]'}`}>
               <h2 id="assigned-steps-heading" className="text-2xl font-semibold leading-tight text-marble md:text-4xl">
                 {activeTask.status === 'waiting'
@@ -260,7 +260,7 @@ export function Response({ eid, kb, account, onLeave }: Props) {
                 )}
               </div>
             </div>
-            <div className="mt-2 text-right text-xs text-marble/45">Say “next step” to continue when this step is done.</div>
+            <div className="mt-2 text-right text-xs text-marble/45">You can also say “next step”.</div>
           </section>
         ) : (
           <section className="mx-auto w-full max-w-3xl border border-[#63c9a8]/30 bg-[#63c9a8]/[0.04] p-8 text-center">
@@ -269,9 +269,70 @@ export function Response({ eid, kb, account, onLeave }: Props) {
           </section>
         )}
 
+        {!isPatient && <Measurements eid={eid} account={account} states={states} patientLink={links[c.patientId]} now={now} />}
+
+        <div className="mt-4 flex flex-wrap items-start gap-x-6 gap-y-2">
+          <Reasoning title="HOW CHIRON BUILT THIS PLAN" steps={planReasoning(c, plan, states, links)} />
+          <button type="button" onClick={() => setShowHandover(!showHandover)} className="flex min-h-10 items-center font-mono text-[11px] tracking-[0.18em] text-[#8fb8ff] hover:text-marble">{showHandover ? 'HIDE HANDOVER SUMMARY' : 'HANDOVER SUMMARY'}</button>
+        </div>
+        {showHandover && <div className="mt-3"><Handover c={c} plan={plan} states={states} /></div>}
+
+        {(plan.warnings.length > 0 || plan.alerts.length > 1) && (
+          <details className="mt-5 border border-[#e39b4b]/40 p-3 text-sm text-[#f3c28d]">
+            <summary className="cursor-pointer">Important notes</summary>
+            <p className="mt-2">{[...plan.warnings, ...plan.alerts.slice(1)].join(' ')}</p>
+          </details>
+        )}
+
+        {!isPatient && isMedicalAccessAuthorized && (
+          <details className="mt-5 border border-[#e5c27b]/40 bg-[#e5c27b]/[0.04] p-4">
+            <summary className="cursor-pointer font-semibold text-[#e5c27b]">Emergency medical summary</summary>
+            <div className="font-mono text-[10px] tracking-[0.17em] text-[#e5c27b]">RESTRICTED · EMERGENCY ACCESS</div>
+            <h2 id="medical-record-access-title" className="mt-1 text-base font-semibold text-marble">Relevant medical summary · {plan.patient.name}</h2>
+            <p className="mt-1 text-xs text-marble/55">Visible only during this active response to the assigned response lead or designated medical crew role. Access is recorded in the shared event log. All example records are simulated. This prototype role-gating is not production security.</p>
+            <p className="mt-1 text-[10px] text-[#e5c27b]">{reviewedMedical ? `Demo-reviewed profile · v${reviewedMedical.version} · ${reviewedMedical.author} · ${reviewedMedical.reviewedAt ? new Date(reviewedMedical.reviewedAt).toLocaleString() : 'date unavailable'}` : localProfile?.status === 'draft' ? 'A local profile draft exists but is not shown as reviewed; displaying seeded demo data only.' : 'No demo-reviewed local profile; displaying seeded demo data only.'}</p>
+            {!medicalAccessed ? (
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="min-w-[220px] flex-1 text-xs text-marble/70">
+                  Reason for access
+                  <select value={accessReason} onChange={(event) => setAccessReason(event.target.value)} className="mt-1 min-h-11 w-full border border-marble/20 bg-[#080b11] px-3 text-sm text-marble">
+                    <option>Emergency assessment</option>
+                    <option>Check allergy or medication relevance</option>
+                    <option>Review medical restriction or history</option>
+                  </select>
+                </label>
+                <button type="button" onClick={openMedicalRecord} className="min-h-11 border border-[#e5c27b]/60 px-4 text-xs font-semibold tracking-wider text-[#e5c27b] hover:bg-[#e5c27b]/10">ACCESS & RECORD</button>
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {[
+                  ['Allergies', relevantMedical.allergies],
+                  ['Medications', relevantMedical.medications],
+                  ['Restrictions', relevantMedical.restrictions],
+                  ['Relevant history', relevantMedical.history],
+                ].map(([label, values]) => (
+                  <div key={String(label)} className="border border-marble/10 p-3">
+                    <div className="font-mono text-[9px] tracking-wider text-marble/45">{label}</div>
+                    <div className="mt-1 text-sm text-marble">{Array.isArray(values) && values.length ? values.join(', ') : 'None recorded in this demo profile'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {medicalAccessEvents.length > 0 && (
+              <details className="mt-3 border-t border-marble/10 pt-2">
+                <summary className="cursor-pointer text-xs text-marble/60">Access audit · {medicalAccessEvents.length} event(s)</summary>
+                <ul className="mt-2 space-y-1 text-[11px] text-marble/55">
+                  {medicalAccessEvents.map((event) => event.type === 'medical-access' && <li key={event.id}>{new Date(event.t).toLocaleString()} · {crew.find((member) => member.id === event.by)?.name ?? event.by} · {event.reason}</li>)}
+                </ul>
+              </details>
+            )}
+          </details>
+        )}
+
         <details className="mt-5 border border-marble/10 bg-marble/[0.02]">
-          <summary className="cursor-pointer px-4 py-3 text-sm text-marble/75">Crew assignments and Mission Control</summary>
+          <summary className="cursor-pointer px-4 py-3 text-base text-marble/85">Who is doing what (change roles here)</summary>
           <div className="space-y-4 border-t border-marble/10 p-4">
+            <CrewRoles eid={eid} account={account} plan={plan} c={c} links={links} log={log} />
             <ul className="grid gap-2 sm:grid-cols-2">
               {crewNow(log).map((member) => {
                 const roles = rolesOf(plan.roles, member.id);
@@ -283,18 +344,7 @@ export function Response({ eid, kb, account, onLeave }: Props) {
                 </li>;
               })}
             </ul>
-            <div className="border-t border-marble/10 pt-3">
-              <div className="font-mono text-[9px] tracking-[0.14em] text-marble/45">MISSION CONTROL MEDICAL REPORT</div>
-              {c.messages.filter((message) => message.direction === 'in' && message.arrivesAt <= Date.now()).length === 0
-                ? <p className="mt-2 text-sm text-marble/50">No messages received.</p>
-                : <ul className="mt-2 space-y-2">{c.messages.filter((message) => message.direction === 'in' && message.arrivesAt <= Date.now()).map((message) => (
-                  <li key={message.id} className="border-l-2 border-[#8fb8ff]/70 pl-3">
-                    <div className="text-sm text-marble">{message.title}</div>
-                    <p className="mt-1 text-xs leading-relaxed text-marble/60">{message.body}</p>
-                  </li>
-                ))}</ul>}
-              <button onClick={reportStatus} className="mt-3 min-h-10 border border-marble/25 px-4 text-xs text-marble/75 hover:border-marble/50">Send status summary</button>
-            </div>
+
           </div>
         </details>
 

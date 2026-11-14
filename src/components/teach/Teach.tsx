@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BookOpen, Check, FileUp, TriangleAlert } from 'lucide-react';
-import { parseProtocol, procedures, type Procedure } from '../../data/procedures';
+import { useEffect, useState } from 'react';
+import { ArrowLeft, BookOpen, Check, TriangleAlert } from 'lucide-react';
+import { procedures, type Procedure } from '../../data/procedures';
 import { StepIllustration } from '../StepIllustration';
 import { NEXT_STEP_EVENT, speak } from '../VoiceControl';
 
@@ -15,25 +15,14 @@ interface Props {
 
 // TEACH: Chiron as a visual instructor. One instruction per card, a picture,
 // progress, and a confirmation for each step.
-export function Teach({ startWith, uploaded, onUpload, onComplete, onMedicalLibrary, onClose }: Props) {
+export function Teach({ startWith, uploaded, onComplete, onMedicalLibrary, onClose }: Props) {
   const all = [...procedures, ...uploaded];
   const [current, setCurrent] = useState<Procedure | undefined>(all.find((p) => p.id === startWith));
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string>();
-  const file = useRef<HTMLInputElement>(null);
 
   const open = (p: Procedure) => { setCurrent(p); setStep(0); setDone(false); };
 
-  const upload = async (f?: File) => {
-    setError(undefined);
-    if (!f) return;
-    if (!/\.(txt|md)$/i.test(f.name)) { setError('This prototype can read .txt and .md protocols. Other formats are not supported yet.'); return; }
-    const p = parseProtocol(f.name, await f.text());
-    if (!p) { setError('Chiron could not find any steps in that file.'); return; }
-    onUpload(p);
-    open(p);
-  };
 
   const s = current?.steps[step];
   useEffect(() => {
@@ -92,12 +81,7 @@ export function Teach({ startWith, uploaded, onUpload, onComplete, onMedicalLibr
               </ul>
             </>
           )}
-          <button onClick={() => file.current?.click()} className="mt-5 flex w-full items-center justify-center gap-2 border border-dashed border-gold/50 px-3 py-3 font-mono text-[10px] tracking-[0.25em] text-gold hover:bg-gold/5">
-            <FileUp size={14} /> UPLOAD A PROTOCOL
-          </button>
-          <input ref={file} type="file" accept=".txt,.md,text/plain,text/markdown" className="hidden" onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} />
-          <p className="mt-2 text-[11px] leading-relaxed text-mute">A text file with numbered steps works best. Chiron turns each step into a card.</p>
-          {error && <p className="mt-2 text-xs text-[#e39b4b]">{error}</p>}
+          <p className="mt-5 text-xs leading-relaxed text-mute">Guides are read-only on board. New or changed guides are sent by Mission Control.</p>
         </nav>
 
         {/* Card stage */}

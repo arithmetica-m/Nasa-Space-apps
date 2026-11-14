@@ -38,8 +38,19 @@ export function outsideness(ind: Indicator, v: number) {
   return below + above;
 }
 
-export function simulate(mission: Mission): DayRecord[] {
-  const rand = rng(mission.id.length * 7919 + mission.totalDays);
+// Each crew member gets their own SIMULATED story, so the crew page shows different statuses.
+export interface HealthStory {
+  seed: number;
+  strain: number;        // how strongly the recent drift builds (0 = none)
+  slow: number;          // extra slow loss of muscle endurance over the mission
+  stoppedLogging?: number; // daily check-ins stopped this many days ago
+  gap: boolean;          // the 4-day missed-log gap in the middle of the history
+}
+
+export const DEFAULT_STORY: HealthStory = { seed: 0, strain: 1, slow: 0, gap: true };
+
+export function simulate(mission: Mission, story: HealthStory = DEFAULT_STORY): DayRecord[] {
+  const rand = rng(mission.id.length * 7919 + mission.totalDays + story.seed);
   const T = mission.today;
   // The demo story: an earlier dip that recovers after a course correction,
   // then a new drift building over the last ~45 days up to "today".
@@ -49,9 +60,9 @@ export function simulate(mission: Mission): DayRecord[] {
   const out: DayRecord[] = [];
 
   for (let day = 0; day <= T; day++) {
-    const logged = !(day >= gapStart && day < gapStart + 4);
+    const logged = !(story.gap && day >= gapStart && day < gapStart + 4) && !(story.stoppedLogging !== undefined && day > T - story.stoppedLogging);
     const dip = day < dipPeak ? smooth((day - dipStart) / (dipPeak - dipStart || 1)) : 1 - smooth((day - dipPeak) / (dipEnd - dipPeak || 1));
-    const strain = Math.max(dip * 0.75, smooth((day - strainStart) / (T - strainStart || 1)) * 1.05);
+    const strain = story.strain * Math.max(dip * 0.75, smooth((day - strainStart) / (T - strainStart || 1)) * 1.05);
     const progress = day / mission.totalDays;
     const values: Record<string, number | undefined> = {};
 
@@ -65,7 +76,7 @@ export function simulate(mission: Mission): DayRecord[] {
         continue;
       }
       const noise = (rand() - 0.5) * span * 0.45;
-      const drift = sign(ind) * span * ((strainEffect[ind.id] ?? 0) * strain + (missionEffect[ind.id] ?? 0) * progress);
+      const drift = sign(ind) * span * ((strainEffect[ind.id] ?? 0) * strain + ((missionEffect[ind.id] ?? 0) + (ind.id === 'endurance' ? story.slow : 0)) * progress);
       const base = ind.worseWhen === 'high' ? lo + span * 0.4 : ind.worseWhen === 'low' ? lo + span * 0.6 : (lo + hi) / 2;
       const v = base + noise + drift;
       values[ind.id] = span >= 10 ? Math.round(v) : +v.toFixed(1);

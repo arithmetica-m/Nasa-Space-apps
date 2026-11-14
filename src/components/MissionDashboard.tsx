@@ -1,127 +1,238 @@
-import { CircleAlert, Mic, Siren, VolumeX } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, BatteryLow, BookOpen, GraduationCap, Map, Mic, Settings, ShieldCheck, Siren, VolumeX, Watch, WifiOff } from 'lucide-react';
 import type { Mission } from '../types';
 import type { CrewMember } from '../emergency/types';
-import { MissionProgress } from './MissionProgress';
+import { crewSummary, statusColor, statusLabel, type CrewHealth } from '../lib/crewHealth';
+import { ago, type LinkStatus } from '../link/link';
+import { MissionTimeline } from './MissionTimeline';
+import { MissionDial } from './SystemMap';
 
-type Mode = 'watch' | 'teach' | 'act';
+export type Page = 'home' | 'profile' | 'train' | 'respond' | 'link' | 'roadmap' | 'nasa' | 'demo';
+export const PAGE_NAME: Record<Page, string> = {
+  home: 'Crew', profile: 'Astronaut', train: 'Prepare · prevent and train',
+  respond: 'Respond · emergency support', link: 'CHIRON LINK · wearables', roadmap: 'About CHIRON', nasa: 'NASA data in CHIRON', demo: 'Demonstration',
+};
 
-interface Props {
+export interface SystemStatus { label: string; tone: 'ok' | 'warn' | 'alert'; detail: string }
+const TONE = { ok: '#5cc8a8', warn: '#e39b4b', alert: '#e45b5b' };
+
+interface HeaderProps {
   mission: Mission;
-  mode: Mode;
   crew: CrewMember[];
   account: string;
-  selectedProfile?: string;
-  activePatientIds: string[];
-  overallStatus: string;
-  statusNeedsAttention: boolean;
   gmt: string;
+  online: boolean;
+  status: SystemStatus;
+  page: Page;
   listening: boolean;
   speaking: boolean;
   voiceSupported: boolean;
+  onHome: () => void;
   onAccount: (id: string) => void;
-  onProfile: (id: string) => void;
-  onCloseProfile: () => void;
-  onEmergency: () => void;
   onVoice: () => void;
   onStopSpeaking: () => void;
   onChangeMission: () => void;
+  onLibrary: () => void;
+  onRoadmap: () => void;
+  onOpen: (p: Page) => void;
 }
 
-export function MissionDashboard({
-  mission, mode, crew, account, selectedProfile, activePatientIds, overallStatus, statusNeedsAttention, gmt,
-  listening, speaking, voiceSupported, onAccount, onProfile, onEmergency, onVoice, onStopSpeaking, onChangeMission,
-  onCloseProfile,
-}: Props) {
-  const phaseLabel = mission.today / mission.totalDays > 0.85 ? 'RETURN / ARRIVAL' : mission.today / mission.totalDays > 0.4 ? 'CRUISE OPERATIONS' : 'OUTBOUND TRANSIT';
+// CHIRON CORE header: the same on every screen.
+export function CoreHeader(p: HeaderProps) {
+  const [menu, setMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !menuRef.current?.contains(e.target as Node)) setMenu(false);
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', close);
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close); };
+  }, [menu]);
+  const date = new Date().toISOString().slice(0, 10);
 
   return (
-    <main className="mx-auto w-full max-w-[1500px] px-4 pb-8 pt-4 md:px-8">
-      <header className="flex flex-wrap items-center gap-4 border-b border-marble/10 pb-4">
-        <div className="mr-auto min-w-[180px]">
-          <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.32em] text-marble/60">
-            <span className="instrument-mark" aria-hidden="true" /> CHIRON · MISSION STATUS
-          </div>
-          <h1 className="mt-1 font-sans text-xl font-semibold tracking-wide text-marble md:text-2xl">{mission.name}</h1>
-          <button onClick={onChangeMission} className="mt-1 text-xs text-marble/50 underline decoration-marble/20 underline-offset-4 hover:text-marble">Change mission</button>
+    <header className="mx-auto w-full max-w-[1200px] px-4 pt-4 md:px-8">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-marble/10 pb-3">
+        <button type="button" onClick={p.onHome} className="flex items-center gap-2 font-serif text-xl tracking-[0.3em] text-marble" aria-label="CHIRON home">
+          <span className="text-gold" aria-hidden="true">⚷</span> CHIRON
+        </button>
+        <div className="font-serif text-base tracking-[0.18em] text-marble/90">{p.mission.name.toUpperCase()}</div>
+        <div className="font-mono text-xs tracking-[0.1em] text-marble/70">{date} · {p.gmt} GMT · <span className="text-gold">MISSION DAY {p.mission.today}</span></div>
+        <div className={`flex items-center gap-1.5 font-mono text-xs tracking-[0.12em] ${p.online ? 'text-[#5cc8a8]' : 'text-[#e39b4b]'}`}
+          title={p.online ? 'Connected' : 'No connection: CHIRON keeps working on this device'}>
+          {p.online ? <span className="h-2 w-2 rounded-full bg-[#5cc8a8]" /> : <WifiOff size={14} />}{p.online ? 'ONLINE' : 'OFFLINE'}
         </div>
-        <div className="order-3 w-full md:order-none md:w-[min(42vw,520px)]">
-          <MissionProgress mission={mission} />
+        <div className="flex items-center gap-1.5 border px-2 py-1 font-mono text-[11px] tracking-[0.12em]" style={{ borderColor: `${TONE[p.status.tone]}88`, color: TONE[p.status.tone] }} title={p.status.detail}>
+          <ShieldCheck size={14} /> MEDICAL SYSTEM: {p.status.label}
         </div>
-        <div className="flex items-center gap-2">
-          <label className="sr-only" htmlFor="crew-account">Signed in as</label>
-          <select id="crew-account" value={account} onChange={(event) => onAccount(event.target.value)} className="min-h-11 max-w-[190px] border border-marble/20 bg-void/90 px-3 text-sm text-marble">
-            {crew.map((member) => <option key={member.id} value={member.id}>Signed in: {member.name}</option>)}
-          </select>
-          <button type="button" onClick={onVoice} disabled={!voiceSupported} aria-label={listening ? 'Stop voice commands' : 'Start voice commands'}
-            className={`flex min-h-11 items-center gap-2 border px-3 text-xs font-medium transition ${listening ? 'border-[#67c9d5] bg-[#67c9d5]/15 text-[#9be7ef]' : 'border-marble/20 text-marble/75 hover:border-[#67c9d5]/70 hover:text-marble'} disabled:cursor-not-allowed disabled:opacity-40`}>
-            <Mic size={16} /> <span className="hidden sm:inline">{listening ? 'Listening…' : 'Voice'}</span>
-          </button>
-          {speaking && <button type="button" onClick={onStopSpeaking} aria-label="Silence spoken response" title="Silence spoken response"
-            className="flex min-h-11 items-center gap-2 border border-[#e39b4b]/60 px-3 text-xs text-[#f3c28d] hover:bg-[#e39b4b]/10">
-            <VolumeX size={16} /><span className="hidden sm:inline">Silence</span>
-          </button>}
-          <div className="hidden text-right font-mono text-[10px] tracking-wider text-marble/60 lg:block">{gmt} GMT<br />EARTH {mission.delayLabel}</div>
-        </div>
-      </header>
 
-      <section aria-labelledby="crew-heading" className="instrument-panel p-4 md:p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.24em] text-marble/50">SHARED MISSION DISPLAY</div>
-            <h2 id="crew-heading" className="mt-1 text-lg font-semibold text-marble md:text-xl">Mission overview</h2>
-          </div>
-          <div className={`flex items-center gap-2 text-xs ${statusNeedsAttention ? 'text-[#ff8585]' : 'text-[#7bd5b8]'}`}>
-            <span className={`h-2 w-2 rounded-full ${statusNeedsAttention ? 'animate-pulse bg-[#e45b5b]' : 'bg-[#63c9a8]'}`} />
-            {overallStatus}
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
-          {crew.map((member) => {
-            const affected = activePatientIds.includes(member.id);
-            const selected = selectedProfile === member.id;
-            const initials = member.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('');
-            return (
-              <button key={member.id} type="button" onClick={() => onProfile(member.id)}
-                aria-pressed={selected}
-                className={`crew-card min-h-[100px] border p-3 text-left transition hover:-translate-y-0.5 hover:border-marble/35 md:p-4 ${selected ? 'border-[#67c9d5]/70 bg-[#67c9d5]/[0.07]' : 'border-marble/10 bg-void/65'}`}>
-                <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-marble/20 bg-[radial-gradient(circle_at_35%_30%,#60717b,#202b32_62%,#111820)] font-mono text-sm text-marble shadow-inner">{initials}</span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-marble md:text-base">{member.name}</span>
-                    <span className="mt-0.5 block truncate text-[10px] text-marble/50 md:text-xs">{member.position.split(' · ')[0]}</span>
-                  </span>
-                </div>
-                <span className={`mt-3 flex items-center gap-1.5 font-mono text-[9px] tracking-[0.12em] md:text-[10px] ${affected ? 'text-[#ff8585]' : 'text-[#7bd5b8]'}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${affected ? 'animate-pulse bg-[#e45b5b]' : 'bg-[#63c9a8]'}`} />
-                  {affected ? 'SUPPORT NEEDED' : member.id === account ? 'ON WATCH · YOU' : 'ON DUTY'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-marble/10 pt-4">
-          <div className="flex items-center gap-3">
-            <div className="instrument-dial" aria-hidden="true"><span>{mission.today}</span></div>
-            <div>
-              <div className="font-mono text-[9px] tracking-[0.18em] text-marble/50">MISSION PHASE · {phaseLabel}</div>
-              <div className="mt-1 text-sm text-marble/75">Day {mission.today} of {mission.totalDays} · {mission.gravity} · {gmt} GMT</div>
-            </div>
-          </div>
-          {selectedProfile && (
-            <button type="button" onClick={onCloseProfile} className="min-h-11 border border-marble/20 px-4 text-sm text-marble/75 hover:border-marble/40 hover:text-marble">
-              Back to mission overview
-            </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button type="button" onClick={p.onLibrary} aria-label="Open the medical library"
+            className="flex min-h-11 items-center gap-2 border border-marble/15 px-3 font-mono text-xs tracking-[0.15em] text-marble/70 hover:border-gold/60 hover:text-marble">
+            <BookOpen size={18} /> <span className="hidden sm:inline">LIBRARY</span>
+          </button>
+          {p.speaking && (
+            <button type="button" onClick={p.onStopSpeaking} aria-label="Silence spoken response"
+              className="flex min-h-11 min-w-11 items-center justify-center border border-[#e39b4b]/60 text-[#f3c28d] hover:bg-[#e39b4b]/10"><VolumeX size={18} /></button>
           )}
+          <button type="button" onClick={p.onVoice} disabled={!p.voiceSupported} aria-label={p.listening ? 'Stop voice commands' : 'Start voice commands'} aria-pressed={p.listening}
+            className={`flex min-h-11 min-w-11 items-center justify-center border transition ${p.listening ? 'border-gold bg-gold/15 text-gold' : 'border-marble/15 text-marble/70 hover:border-gold/60 hover:text-marble'} disabled:opacity-40`}>
+            <Mic size={18} />
+          </button>
+          <div className="relative" ref={menuRef}>
+            <button type="button" onClick={() => setMenu(!menu)} aria-label="Device settings" aria-expanded={menu}
+              className="flex min-h-11 min-w-11 items-center justify-center border border-marble/15 text-marble/70 hover:border-gold/60 hover:text-marble">
+              <Settings size={18} />
+            </button>
+            {menu && (
+              <div className="absolute right-0 top-12 z-30 w-64 border border-marble/15 bg-void p-3 shadow-2xl">
+                <label htmlFor="crew-account" className="font-mono text-[10px] tracking-[0.2em] text-marble/50">THIS DEVICE BELONGS TO</label>
+                <select id="crew-account" value={p.account} onChange={(e) => p.onAccount(e.target.value)}
+                  className="mt-1 min-h-11 w-full border border-marble/20 bg-void px-2 text-sm text-marble">
+                  {p.crew.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+                <p className="mt-1 text-[11px] text-marble/40">Switching is for the demo only.</p>
+                <button type="button" onClick={() => { setMenu(false); p.onOpen('demo'); }} className="mt-3 min-h-11 w-full bg-gold/90 font-mono text-xs tracking-[0.18em] text-void hover:bg-gold">▶ DEMONSTRATION</button>
+                <button type="button" onClick={() => { setMenu(false); p.onRoadmap(); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">About CHIRON and roadmap</button>
+                <button type="button" onClick={() => { setMenu(false); p.onOpen('nasa'); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">NASA data in CHIRON</button>
+                <button type="button" onClick={() => { setMenu(false); p.onChangeMission(); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">Change mission</button>
+                <div className="mt-3 font-mono text-[10px] tracking-[0.15em] text-marble/40">EARTH DELAY {p.mission.delayLabel.toUpperCase()} EACH WAY</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {p.page !== 'home' && (
+        <button type="button" onClick={p.onHome} className="mt-3 flex min-h-11 items-center gap-2 font-mono text-xs tracking-[0.15em] text-marble/70 hover:text-marble">
+          <ArrowLeft size={16} /> CREW HOME <span className="text-marble/40">/ {PAGE_NAME[p.page].toUpperCase()}</span>
+        </button>
+      )}
+    </header>
+  );
+}
+
+const initials = (name: string) => name.split(/\s+/).map((x) => x[0]).slice(0, 2).join('');
+export const roleOf = (m: CrewMember) => m.position.split(' · ').pop()!.toUpperCase();
+
+interface HomeProps {
+  mission: Mission;
+  crew: CrewMember[];
+  account: string;
+  health: Record<string, CrewHealth>;
+  links: Record<string, LinkStatus>;
+  now: number;
+  tiles: Record<'train' | 'respond', string>;
+  onProfile: (id: string) => void;
+  onPage: (p: Page) => void;
+  checkedIn: boolean;
+  onCheckIn: () => void;
+}
+
+// HOME: who is on board, how the crew is doing, and what CHIRON can do to help.
+export function HomePage({ mission, crew, account, health, links, now, tiles, onProfile, onPage, checkedIn, onCheckIn }: HomeProps) {
+  const bands = Object.values(links);
+  const offline = bands.filter((b) => !b.connected);
+  const bandAlerts = bands.reduce((n, b) => n + b.alerts.length, 0);
+
+  return (
+    <main className="mx-auto w-full max-w-[1200px] space-y-4 px-4 pb-24 pt-3 md:px-8">
+      <section aria-labelledby="crew-status" className="flex items-center gap-4 border-l-4 border-gold bg-void/75 px-5 py-3 backdrop-blur-md">
+        <div className="min-w-0 flex-1">
+          <h2 id="crew-status" className="font-mono text-[11px] tracking-[0.25em] text-gold">HOW IS THE CREW DOING?</h2>
+          <p className="mt-1 font-serif text-xl tracking-[0.08em] text-marble md:text-2xl" aria-live="polite">{crewSummary(crew.map((m) => health[m.id]?.status ?? 'nodata'))}</p>
+        </div>
+        <div className="hidden shrink-0 sm:block"><MissionDial mission={mission} size={112} /></div>
+      </section>
+
+      {bands.flatMap((b) => b.warnings.map((w) => ({ b, w }))).map(({ b, w }) => (
+        <button key={b.crewId + w.key} type="button" onClick={() => onProfile(b.crewId)} role="alert"
+          className="flex min-h-16 w-full flex-wrap items-center justify-between gap-3 border-2 border-[#e45b5b] bg-[#e45b5b]/15 px-5 py-2 text-left backdrop-blur-md hover:bg-[#e45b5b]/25">
+          <span>
+            <span className="block font-mono text-xs tracking-[0.2em] text-[#ff8585]"><Watch size={14} className="mr-1 inline" /> LINK WARNING · {ago(w.t, now).toUpperCase()}</span>
+            <span className="block text-lg text-marble">{crew.find((c) => c.id === b.crewId)?.name}: {w.label.toLowerCase()} {w.value}{w.unit === '%' ? '%' : ` ${w.unit}`}</span>
+            <span className="block text-sm text-marble/60">Prototype rule: {w.rule}</span>
+          </span>
+          <span className="font-mono text-xs tracking-[0.2em] text-[#ff8585]">OPEN DASHBOARD</span>
+        </button>
+      ))}
+
+      {!checkedIn && (
+        <button type="button" onClick={onCheckIn}
+          className="flex min-h-16 w-full items-center justify-between gap-3 border border-gold/60 bg-gold/10 px-5 text-left backdrop-blur-md hover:bg-gold/20">
+          <span className="text-lg text-marble">{crew.find((c) => c.id === account)?.name.split(' ')[0]}, your daily check-in is not done yet.</span>
+          <span className="shrink-0 bg-gold px-5 py-3 font-mono text-sm tracking-[0.2em] text-void">CHECK IN</span>
+        </button>
+      )}
+
+      <section aria-label="Crew members" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {crew.map((m) => {
+          const h = health[m.id];
+          const l = links[m.id];
+          const color = statusColor[h.status];
+          const hr = l.readings.find((r) => r.key === 'hr');
+          const alerts = l.alerts.length + (h.status === 'attention' ? 1 : 0);
+          return (
+            <button key={m.id} type="button" onClick={() => onProfile(m.id)}
+              aria-label={`${m.name}, ${statusLabel[h.status]}, ${h.comment}. Open medical dashboard.`}
+              className="flex min-h-[170px] flex-col border border-marble/10 bg-void/75 p-5 text-left backdrop-blur-md transition hover:border-gold/60 hover:bg-void/90"
+              style={{ borderTop: `4px solid ${color}` }}>
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-gold/40 bg-void/60 font-mono text-base text-gold">{initials(m.name)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-serif text-lg tracking-[0.1em] text-marble">
+                    {m.name.toUpperCase()}{m.id === account && <span className="ml-2 font-mono text-[10px] tracking-[0.2em] text-gold">YOU</span>}
+                  </span>
+                  <span className="block truncate text-xs tracking-[0.12em] text-marble/50">{roleOf(m)}</span>
+                </span>
+                {alerts > 0 && <span className="shrink-0 bg-[#e39b4b] px-2 py-0.5 font-mono text-[11px] text-void" title="Active alerts">{alerts} ALERT{alerts > 1 ? 'S' : ''}</span>}
+              </div>
+              <div className="mt-4 font-serif text-2xl font-bold tracking-[0.1em]" style={{ color }}>{statusLabel[h.status]}</div>
+              <div className="mt-1 text-sm tracking-[0.06em] text-marble/80">{h.comment}</div>
+              <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 font-mono text-[11px] tracking-[0.1em]">
+                <span className={l.connected ? 'text-marble/60' : 'text-[#e39b4b]'}>
+                  <Watch size={12} className="mr-1 inline" />
+                  {l.connected ? `LINK ON · ${l.battery}%` : `LINK OFFLINE ${ago(l.lastSync, now).toUpperCase()}`}
+                  {l.connected && l.battery < 25 && <BatteryLow size={12} className="ml-1 inline text-[#e39b4b]" />}
+                </span>
+                {hr?.value !== undefined && l.connected && <span className="text-marble/60">HR {hr.value} · {ago(hr.t!, now).toUpperCase()}</span>}
+                <span className={h.status === 'nodata' ? 'text-[#e39b4b]' : 'text-marble/45'}>{m.id === account && !checkedIn ? 'CHECK-IN DUE TODAY' : h.daysSinceLog === undefined ? 'NO CHECK-INS' : h.daysSinceLog === 0 ? 'CHECKED IN TODAY' : `CHECK-IN ${h.daysSinceLog}D AGO`}</span>
+              </div>
+            </button>
+          );
+        })}
+      </section>
+
+      <button type="button" onClick={() => onPage('link')}
+        className="flex min-h-14 w-full flex-wrap items-center gap-x-6 gap-y-1 border border-marble/10 bg-void/75 px-5 py-3 text-left backdrop-blur-md hover:border-gold/60">
+        <span className="flex items-center gap-2 font-mono text-xs tracking-[0.2em] text-gold"><Watch size={16} /> CHIRON LINK</span>
+        <span className="text-sm text-marble">{bands.length - offline.length} of {bands.length} wearables connected</span>
+        {offline.length > 0 && <span className="text-sm text-[#e39b4b]">{offline.length} disconnected</span>}
+        <span className={`text-sm ${bandAlerts ? 'text-[#e39b4b]' : 'text-marble/60'}`}>{bandAlerts} wearable alert{bandAlerts === 1 ? '' : 's'}</span>
+        <span className="ml-auto font-mono text-xs tracking-[0.2em] text-marble/50">OPEN</span>
+      </button>
+
+      <section aria-labelledby="help-title">
+        <h2 id="help-title" className="mb-2 font-mono text-[11px] tracking-[0.25em] text-gold">WHAT CAN CHIRON DO TO HELP?</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {([
+            ['train', 'PREPARE', 'PREVENT + TRAIN', GraduationCap],
+            ['respond', 'RESPOND', 'Emergency support', Siren],
+          ] as const).map(([id, name, sub, Icon]) => (
+            <button key={id} type="button" onClick={() => onPage(id)}
+              className={`flex min-h-[120px] flex-col border bg-void/75 p-4 text-left backdrop-blur-md hover:bg-void/90 ${id === 'respond' ? 'border-[#e45b5b]/40 hover:border-[#e45b5b]' : 'border-marble/10 hover:border-gold/60'}`}>
+              <Icon size={22} className={id === 'respond' ? 'text-[#ff8585]' : 'text-gold'} />
+              <span className="mt-2 font-serif text-xl tracking-[0.2em] text-marble">{name}</span>
+              <span className="text-sm text-marble/55">{sub}</span>
+              <span className="mt-auto pt-2 text-base text-marble/85">{tiles[id]}</span>
+            </button>
+          ))}
         </div>
       </section>
 
-      {mode === 'watch' && (
-        <div className="mt-4 flex justify-end">
-          <button type="button" onClick={onEmergency} className="flex min-h-12 items-center gap-2 border border-[#e45b5b]/65 bg-[#e45b5b]/10 px-5 font-mono text-xs font-semibold tracking-[0.16em] text-[#ff8585] transition hover:bg-[#e45b5b]/20 focus-visible:outline-[#ff8585]">
-            <Siren size={17} /> REPORT EMERGENCY <CircleAlert size={14} />
-          </button>
-        </div>
-      )}
+      <MissionTimeline mission={mission} />
+      <p className="flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] text-marble/40"><Map size={12} /> ALL HEALTH AND WEARABLE DATA IS SIMULATED · STATUS USES DEMO RULES, NOT APPROVED MEDICAL RULES</p>
     </main>
   );
 }

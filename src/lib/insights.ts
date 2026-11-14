@@ -4,6 +4,7 @@ import { guidance } from '../data/guidance';
 import { outsideness } from '../data/simulate';
 import { studiesFor, type Study } from '../data/research';
 import { referenceCard } from './references';
+import { explain, type Explanation } from '../data/meanings';
 
 // What kind of knowledge an insight rests on. Shown on every insight so the
 // astronaut can tell a measurement from a trend, research, a risk or mission context.
@@ -24,6 +25,8 @@ export interface Insight {
   // Level 2: why it matters
   why: string;
   suggestion?: string;
+  // Plain words: what the reading is and what this change can mean
+  meaning?: Explanation;
   procedure?: string;
   // Level 3: the science behind it
   science: {
@@ -62,9 +65,10 @@ function trendInsight(system: SystemId, records: DayRecord[]): Insight | undefin
   return {
     id: `trend-${system}`,
     evidence: studies.length ? ['trend', 'research'] : ['trend'],
-    title: `${ind.name} ${below ? 'below' : 'above'} the demo baseline${days > 1 ? ` for ${days} days` : ''}`,
+    title: `${ind.name} ${below ? 'lower' : 'higher'} than your normal${days > 1 ? ` for ${days} days` : ''}`,
     why: guidance[system].why,
-    suggestion: guidance[system].suggest,
+    meaning: explain(ind.id, ref.current!.value, { when: `mission day ${ref.current!.day}`, source: `${ref.current!.source} · SIMULATED` }),
+    suggestion: explain(ind.id, ref.current!.value).todo ?? guidance[system].suggest,
     procedure: procedureFor[system],
     science: {
       facts: [

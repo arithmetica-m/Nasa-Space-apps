@@ -39,6 +39,8 @@ export interface EmergencyCase {
   outcomes: Record<string, { outcome: 'done' | 'cannot' | 'yes' | 'no'; by: string; t: number }>;
   verified: Set<string>;
   vitals: { t: number; by: string; spo2?: number; hr?: number; note?: string }[];
+  measures: { key: string; value: string; source: 'manual' | 'link'; t: number; by: string }[];
+  assignments: Partial<Record<RoleId, { crewId: string; t: number; by: string }>>;
   messages: EarthMessage[];
 }
 
@@ -48,7 +50,7 @@ export function casesFrom(log: ChironEvent[]): EmergencyCase[] {
   const queued: EarthMessage[] = [];
   for (const e of log) {
     if (e.type === 'start') {
-      map.set(e.eid, { eid: e.eid, category: e.category, patientId: e.patientId, mission: e.mission, reason: e.reason, startedAt: e.t, startedBy: e.by, ended: false, outcomes: {}, verified: new Set(), vitals: [], messages: [] });
+      map.set(e.eid, { eid: e.eid, category: e.category, patientId: e.patientId, mission: e.mission, reason: e.reason, startedAt: e.t, startedBy: e.by, ended: false, outcomes: {}, verified: new Set(), vitals: [], messages: [], measures: [], assignments: {} });
       continue;
     }
     if (e.type === 'link') {
@@ -63,6 +65,8 @@ export function casesFrom(log: ChironEvent[]): EmergencyCase[] {
     if (e.type === 'verify') c.verified.add(e.stepId);
     if (e.type === 'vitals') c.vitals.push({ t: e.t, by: e.by, spo2: e.spo2, hr: e.hr, note: e.note });
     if (e.type === 'end') c.ended = true;
+    if (e.type === 'measure') c.measures.push({ key: e.key, value: e.value, source: e.source, t: e.t, by: e.by });
+    if (e.type === 'assign') c.assignments[e.role] = { crewId: e.crewId, t: e.t, by: e.by };
     if (e.type === 'message') {
       const m = { ...e.message };
       // While queued, arrivesAt holds only the travel time; it becomes a time when sent.
@@ -103,6 +107,11 @@ export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[],
   const patient = crew.find((m) => m.id === c.patientId)!;
   const { procedure, reason } = resolveProcedure(kb, c.category, c.mission);
   const { roles, warnings } = assignRoles(pool, c.patientId, c.category, procedure);
+  // The crew can change any suggestion. Their choice always wins.
+  for (const [role, a] of Object.entries(c.assignments) as [RoleId, { crewId: string }][]) {
+    const person = crew.find((m) => m.id === a.crewId);
+    if (person) roles[role] = { person, note: 'Chosen by the crew' };
+  }
   const inventory = inventoryNow(log, c.mission);
   const checks = procedure ? checkResources(procedure, inventory) : [];
   const alerts: string[] = [];

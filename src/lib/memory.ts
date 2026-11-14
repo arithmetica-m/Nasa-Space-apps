@@ -1,0 +1,54 @@
+import type { MissionId } from '../types';
+import type { ChironEvent } from '../emergency/events';
+import { casesFrom } from '../emergency/plan';
+import { crew, procedures } from '../emergency/data';
+import { indicators } from '../data/indicators';
+import { categoryText } from '../emergency/report';
+import { practiceRecords, SKILLS } from '../train/training';
+import { ACTIVITIES, sessions } from '../recover/recovery';
+
+// MISSION MEDICAL MEMORY: one structured, time-ordered record of medical events,
+// rebuilt from the shared log and the records on this device. It records what happened,
+// what was measured, what was done and what stayed uncertain, for later review and training.
+
+export interface MemoryItem { t: number; kind: string; who: string; title: string; detail?: string; group?: string }
+
+const stepText = (id: string) => procedures.flatMap((p) => p.steps).find((s) => s.id === id)?.text ?? `step ${id}`;
+const measureName = (key: string) => procedures.flatMap((p) => p.measurements ?? []).find((m) => m.key === key)?.label ?? indicators.find((i) => i.id === key)?.name ?? key;
+const short = (s: string) => (s.length > 90 ? `${s.slice(0, 88)}…` : s);
+
+const name = (id: string) => crew.find((c) => c.id === id)?.name ?? id;
+
+export function missionMemory(log: ChironEvent[], mission: MissionId, checkIns: Record<string, { at: number; symptoms: string[]; values: Record<string, number> }>, crewId?: string): MemoryItem[] {
+  const out: MemoryItem[] = [];
+  const mine = (id: string) => !crewId || id === crewId;
+
+  for (const [id, ci] of Object.entries(checkIns)) {
+    if (!mine(id)) continue;
+    out.push({ t: ci.at, kind: 'Check-in', who: name(id), title: `Daily check-in (${Object.keys(ci.values).length} readings)`, detail: ci.symptoms.length ? `Symptoms: ${ci.symptoms.join(', ')}` : 'No symptoms' });
+  }
+  for (const m of crew) {
+    if (!mine(m.id)) continue;
+    try {
+      const reports = JSON.parse(localStorage.getItem(`chiron-body-reports-v1-${m.id}`) ?? '[]') as { region: string; note: string; at: string }[];
+      for (const r of reports) out.push({ t: Date.parse(r.at), kind: 'Symptom', who: m.name, title: `Reported: ${r.note}` });
+    } catch { /* ignore unreadable local data */ }
+  }
+  for (const c of casesFrom(log).filter((x) => x.mission === mission)) {
+    const involved = c.patientId === crewId || Object.values(c.outcomes).some((o) => o.by === crewId);
+    if (crewId && !involved) continue;
+    out.push({ t: c.startedAt, kind: 'Emergency', who: name(c.patientId), title: `${categoryText[c.category]}: ${name(c.patientId)}`, detail: c.ended ? 'closed' : 'still active', group: c.eid });
+    for (const [step, o] of Object.entries(c.outcomes)) out.push({ t: o.t, kind: 'Step', who: name(o.by), title: `${o.outcome === 'cannot' ? 'Could not do' : o.outcome === 'done' ? 'Done' : `Answered ${o.outcome}`}: ${short(stepText(step))}`, detail: name(o.by), group: c.eid });
+    for (const ms of c.measures) out.push({ t: ms.t, kind: 'Measurement', who: name(c.patientId), title: `${measureName(ms.key)}: ${ms.value}`, detail: ms.source === 'link' ? 'from LINK wearable' : `measured by ${name(ms.by)}`, group: c.eid });
+    for (const msg of c.messages.filter((x) => x.report)) out.push({ t: msg.sentAt || c.startedAt, kind: 'Earth', who: 'CHIRON', title: `Sent to Earth: ${msg.title}`, group: c.eid });
+  }
+  for (const r of practiceRecords()) {
+    if (!mine(r.crewId)) continue;
+    out.push({ t: r.t, kind: 'Training', who: name(r.crewId), title: `Practised: ${SKILLS.find((s) => s.id === r.skillId)?.name ?? r.skillId}`, detail: `score ${r.score}/${r.total}` });
+  }
+  for (const m of crew) {
+    if (!mine(m.id)) continue;
+    for (const s of sessions(m.id)) out.push({ t: Date.parse(s.day), kind: 'Recovery', who: name(m.id), title: `Done: ${ACTIVITIES.find((a) => a.id === s.activityId)?.label ?? s.activityId}` });
+  }
+  return out.filter((x) => Number.isFinite(x.t)).sort((a, b) => b.t - a.t);
+}

@@ -122,9 +122,9 @@ export function HealthRecord({ mission, records, marks, selection, onSelect }: P
 
         <div className="mt-2">
           <Frieze records={records} totalDays={mission.totalDays} marks={marks} selection={selection} onSelect={pick}
-            milestones={mission.milestones} onFocus={setFocus} />
+            onFocus={setFocus} />
           <div className="mt-1 px-1 text-[10px] text-mute">
-            Health readings are simulated for this demonstration, not clinical measurements.
+            Simulated readings.
           </div>
           {focus && <FocusCard item={focus} mission={mission} />}
         </div>

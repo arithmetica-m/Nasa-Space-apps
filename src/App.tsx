@@ -3,37 +3,50 @@ import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import type { DayRecord, Mark, MissionId } from './types';
 import { missions } from './data/missions';
-import { buildMarks, simulate } from './data/simulate';
+import { buildMarks } from './data/simulate';
+import { crewHealth, recordsFor, type CrewHealth } from './lib/crewHealth';
+import { SignIn } from './components/SignIn';
+import { parseCommand } from './lib/voiceCommands';
 import type { Procedure } from './data/procedures';
 import { Earth, Mars, Moon, SUN_DIR } from './three/Planets';
 import { CameraRig } from './three/CameraRig';
 import { Routes } from './three/Routes';
 import { INTRO_VIEW, backdropView, framing, selectView } from './three/space';
 import { Intro } from './components/Intro';
-import { HealthRecord } from './components/HealthRecord';
-import { HealthSupport } from './components/HealthSupport';
 import { CheckIn } from './components/CheckIn';
-import { Today } from './components/watch/Today';
 import { Teach } from './components/teach/Teach';
 import { Act } from './components/act/Act';
-import { KnowledgeBase } from './components/KnowledgeBase';
-import { MissionDashboard } from './components/MissionDashboard';
+import { Library } from './components/library/Library';
+import { OPEN_LIBRARY_EVENT } from './components/Explained';
+import { CoreHeader, HomePage, type Page, type SystemStatus } from './components/MissionDashboard';
+import { ProfilePage } from './components/pages/ProfilePage';
+import { TrainPage } from './components/pages/TrainPage';
+import { RespondPage } from './components/pages/RespondPage';
+import { LinkPage } from './components/pages/LinkPage';
+import { RoadmapPage } from './components/pages/RoadmapPage';
+import { NasaPage } from './components/pages/NasaPage';
+import { DemoPage, type DemoAction } from './components/pages/DemoPage';
+import { publish } from './emergency/sync';
+import { SosAlerts } from './components/SosAlerts';
+import { linkFor, useNow, withLinkEvents } from './link/link';
+import { missionMemory } from './lib/memory';
+import { skillStatus } from './train/training';
+import { checkResources } from './emergency/engine';
 import { EmergencyAlerts } from './components/EmergencyAlerts';
 import { NEXT_STEP_EVENT, speak, stopSpeaking, useVoiceControl } from './components/VoiceControl';
 import type { Selection } from './components/Frieze';
-import { crew, inventoryFor, procedures as emergencyProcedures } from './emergency/data';
-import type { Procedure as EmergencyProcedure } from './emergency/types';
+import { crew, procedures as emergencyProcedures } from './emergency/data';
 import { useAccount } from './emergency/account';
 import { useLog } from './emergency/sync';
-import { casesFrom } from './emergency/plan';
+import { casesFrom, inventoryNow } from './emergency/plan';
 import { usePersisted } from './emergency/store';
 
 // The whole app is one continuous scene; each phase is a different camera view of it.
 type Phase = 'intro' | 'select' | 'launch' | 'mission';
-// Chiron's modes. Watch is the everyday view; Teach and Act appear only when needed.
+// Contextual modes: everyday screens (watch), learning a procedure (teach), an active emergency (act).
 type Mode = 'watch' | 'teach' | 'act';
 
-interface TodayCheckIn { values: Record<string, number>; symptoms: string[]; time: string }
+interface TodayCheckIn { values: Record<string, number>; symptoms: string[]; time: string; at: number }
 
 function useGmt() {
   const [now, setNow] = useState(() => new Date());
@@ -42,6 +55,32 @@ function useGmt() {
     return () => clearInterval(t);
   }, []);
   return now.toISOString().slice(11, 16);
+}
+
+function useOnline() {
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(navigator.onLine);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', on);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', on); };
+  }, []);
+  return online;
+}
+
+function withCheckIn(sim: DayRecord[], ci?: TodayCheckIn): DayRecord[] {
+  if (!ci) return sim;
+  const last = sim[sim.length - 1];
+  return [...sim.slice(0, -1), { ...last, logged: true, values: { ...last.values, ...ci.values } }];
+}
+
+// Setup (mission choice and sign-in) happens once per device and is remembered.
+const MISSION_KEY = 'chiron-mission-v1';
+function savedMission(): MissionId | undefined {
+  try {
+    const v = localStorage.getItem(MISSION_KEY);
+    return v && v in missions ? (v as MissionId) : undefined;
+  } catch { return undefined; }
 }
 
 function useAspect() {
@@ -54,156 +93,140 @@ function useAspect() {
   return aspect;
 }
 
-function initialEmergencyKnowledge(): EmergencyProcedure[] {
-  const legacyScenarioIds = new Set(['DEMO-DCS-01', 'DEMO-ENV-02', 'DEMO-ANA-03', 'DEMO-BHP-04']);
-  try {
-    const raw = localStorage.getItem('chiron-kb-v1');
-    if (!raw) return emergencyProcedures;
-    const saved: unknown = JSON.parse(raw);
-    if (!Array.isArray(saved)) return emergencyProcedures;
-    const retained = saved.filter((value): value is EmergencyProcedure =>
-      typeof value === 'object' && value !== null
-      && 'id' in value && typeof value.id === 'string' && !legacyScenarioIds.has(value.id)
-      && 'title' in value && typeof value.title === 'string'
-      && 'category' in value && typeof value.category === 'string'
-      && ['dcs', 'respiratory', 'anaphylaxis', 'behavioral'].includes(value.category)
-      && 'steps' in value && Array.isArray(value.steps)
-      && 'status' in value && ['approved', 'draft', 'superseded'].includes(String(value.status)),
-    );
-    return [...emergencyProcedures, ...retained];
-  } catch (error) {
-    console.warn('Could not migrate the saved scenario library; using current demo scenarios.', error);
-    return emergencyProcedures;
-  }
-}
-
 export default function App() {
-  const [phase, setPhase] = useState<Phase>('intro');
+  const [phase, setPhase] = useState<Phase>(() => (savedMission() ? 'mission' : 'intro'));
   const [mode, setMode] = useState<Mode>('watch');
+  const [page, setPage] = useState<Page>('home');
   const [hovered, setHovered] = useState<MissionId>();
-  const [chosen, setChosen] = useState<MissionId>();
-  const [selection, setSelection] = useState<Selection>({ from: 0, to: 0 });
-  const [checkIns, setCheckIns] = useState<Partial<Record<MissionId, Record<string, TodayCheckIn>>>>({});
+  const [chosen, setChosen] = useState<MissionId | undefined>(savedMission);
+  const [selection, setSelection] = useState<Selection>(() => {
+    const m = savedMission();
+    return m ? { from: missions[m].today, to: missions[m].today } : { from: 0, to: 0 };
+  });
+  // Check-ins are kept on the device, so they are part of the mission medical record.
+  const [checkIns, setCheckIns] = usePersisted<Partial<Record<MissionId, Record<string, TodayCheckIn>>>>('chiron-checkins-v1', () => ({}));
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [teachStart, setTeachStart] = useState<string>();
   const [actReason, setActReason] = useState<string>();
+  const [actPatient, setActPatient] = useState<string>();
   const [uploaded, setUploaded] = useState<Procedure[]>([]);
   const [extraMarks, setExtraMarks] = useState<Partial<Record<MissionId, Mark[]>>>({});
   const [joinEid, setJoinEid] = useState<string>();
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [libraryEntry, setLibraryEntry] = useState<string>();
+  useEffect(() => {
+    const on = (e: Event) => { setLibraryEntry((e as CustomEvent<string | undefined>).detail); setLibraryOpen(true); };
+    window.addEventListener(OPEN_LIBRARY_EVENT, on);
+    return () => window.removeEventListener(OPEN_LIBRARY_EVENT, on);
+  }, []);
   const [selectedProfile, setSelectedProfile] = useState<string>();
   const [voiceConfirm, setVoiceConfirm] = useState(false);
-  const [account, setAccount] = useAccount();
-  // The mission's medical knowledge base, kept on the device (works offline).
-  const [kb, setKb] = usePersisted<EmergencyProcedure[]>('chiron-kb-v2', initialEmergencyKnowledge);
+  const [account, setAccount, signedIn] = useAccount();
+  const online = useOnline();
+  // Approved emergency protocols. Read-only on board: only Mission Control releases new versions.
+  const kb = emergencyProcedures;
   const log = useLog();
   const gmt = useGmt();
+  const now = useNow();
   const aspect = useAspect();
+
+  const openProfile = (id: string) => { setSelectedProfile(id); setPage('profile'); setMode('watch'); };
+  const goHome = () => { setPage('home'); setSelectedProfile(undefined); setMode('watch'); };
+
   const voice = useVoiceControl((text) => {
-    const command = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’]s\b/g, '').replace(/[.!?,'’]/g, '').replace(/\s+/g, ' ').trim();
-    if (/^(?:open|show) my (?:health )?profile$/.test(command)) {
-      setSelectedProfile(account);
-      setMode('watch');
-      speak(`Opening your health profile, ${crew.find((member) => member.id === account)?.name ?? 'crew member'}.`);
-    } else if (/show crew status|crew status|mission overview|go back to overview/.test(command)) {
-      setMode('watch');
-      setSelectedProfile(undefined);
-      speak('Crew status is displayed on the mission dashboard.');
-    } else if (/open daily check.?in|start daily check.?in/.test(command)) {
-      setSelectedProfile(account);
-      setMode('watch');
-      setCheckInOpen(true);
-      speak('Opening your daily check-in.');
-    } else if (/open watch|show watch/.test(command)) {
-      setMode('watch');
-      speak('Opening Watch.');
-    } else if (/^(?:please )?(?:go to )?next step$/.test(command)) {
-      if (mode === 'act' || mode === 'teach') {
-        window.dispatchEvent(new Event(NEXT_STEP_EVENT));
-      } else {
-        speak('Open a measurement guide or emergency response first.');
+    const cmd = parseCommand(text, crew);
+    const nameOf = (id: string) => crew.find((m) => m.id === id)?.name ?? 'crew member';
+    switch (cmd.type) {
+      case 'emergency': setVoiceConfirm(true); speak('Confirm on screen to open emergency response.'); break;
+      case 'next':
+        if (mode === 'act' || mode === 'teach') window.dispatchEvent(new Event(NEXT_STEP_EVENT));
+        else speak('Open a procedure or an emergency first.');
+        break;
+      case 'silence': stopSpeaking(); break;
+      case 'profile': {
+        const id = cmd.crewId ?? account;
+        openProfile(id);
+        speak(`Opening ${id === account ? 'your' : `${nameOf(id)}'s`} dashboard.`);
+        break;
       }
-    } else if (/open act|open emergency mode|open emergency response/.test(command)) {
-      setVoiceConfirm(true);
-      speak('Please confirm on screen to open emergency response.');
-    } else if (/(?:profile|health).*(?:open|show)|(?:open|show).*(?:profile|health)/.test(command)) {
-      const requestedName = command.replace(/^(?:please\s+)?(?:can you\s+)?(?:could you\s+)?(?:open|show)\s+/, '')
-        .replace(/^(?:the\s+)?profile\s+(?:for|of)\s+/, '')
-        .replace(/\s+(?:health\s+)?profile.*$/, '')
-        .replace(/^(?:the\s+)?/, '')
-        .replace(/\s+/g, ' ').trim();
-      const tokens = requestedName.split(' ').filter((token) => !['the', 'for', 'of', 'my', 'health'].includes(token));
-      const distance = (left: string, right: string) => {
-        const row = Array.from({ length: right.length + 1 }, (_, index) => index);
-        for (let i = 1; i <= left.length; i += 1) {
-          let previous = row[0];
-          row[0] = i;
-          for (let j = 1; j <= right.length; j += 1) {
-            const current = row[j];
-            row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (left[i - 1] === right[j - 1] ? 0 : 1));
-            previous = current;
-          }
-        }
-        return row[right.length];
-      };
-      const member = crew.find((person) => {
-        const nameTokens = person.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/);
-        return tokens.some((token) => nameTokens.some((name) => token === name || (token.length > 3 && distance(token, name) <= 1)));
-      });
-      if (member) {
-        setSelectedProfile(member.id);
-        setMode('watch');
-        speak(`Opening ${member.name}’s health profile.`);
-      } else {
-        speak('I could not identify that crew member. Try “open my health profile”.');
-      }
-    } else if (/check my readiness|readiness for the next task/.test(command)) {
-      const needsAttention = (records[records.length - 1]?.drift ?? 0) >= 0.3;
-      speak(needsAttention
-        ? 'Your simulated readings need a review before the next task. Open Watch for details.'
-        : 'No simulated readings are flagged for attention. Confirm readiness with your mission lead.');
-      setMode('watch');
-    } else if (/explain my radiation exposure|radiation exposure/.test(command)) {
-      setMode('watch');
-      setSelectedProfile(account);
-      speak(`The mission estimate is ${mission?.radiationPerDay ?? 0} millisieverts per day. This is a simulated estimate, not a personal dosimeter reading.`);
-    } else if (/show available medical equipment|available medical equipment|show available equipment|open medical equipment/.test(command)) {
-      setInventoryOpen(true);
-      const items = mission ? inventoryFor(mission.id).filter((item) => item.status === 'available' && item.quantity > 0) : [];
-      speak(`${items.length} equipment items are marked available. The list is open on screen.`);
-    } else {
-      speak('Command not recognized. Try open my health profile, show crew status, open daily check-in, open Teach, or show available medical equipment.');
+      case 'home': goHome(); speak('Crew status.'); break;
+      case 'checkin': openProfile(account); setCheckInOpen(true); speak('Opening your check-in.'); break;
+      case 'teach': setPage('train'); setMode('watch'); speak('Opening training.'); break;
+      case 'equipment': setPage('respond'); setMode('watch'); speak('Showing medical stock.'); break;
+      case 'library': setLibraryOpen(true); speak('Opening the medical library.'); break;
+      default: speak('Sorry, I did not catch that. Try crew status, my profile, check in, or emergency.');
     }
   });
 
   const mission = chosen ? missions[chosen] : undefined;
-  const activeProfileId = selectedProfile ?? account;
-  const todayCheckIn = chosen ? checkIns[chosen]?.[activeProfileId] : undefined;
+  const missionCheckIns = useMemo(() => (chosen && checkIns[chosen]) || {}, [chosen, checkIns]);
 
-  // Simulated history, with today's check-in (if any) applied to the last day.
-  const records = useMemo<DayRecord[]>(() => {
-    if (!mission) return [];
-    const sim = simulate(mission);
-    if (!todayCheckIn) return sim;
-    const last = sim[sim.length - 1];
-    return [...sim.slice(0, -1), { ...last, logged: true, values: { ...last.values, ...todayCheckIn.values } }];
-  }, [mission, todayCheckIn]);
+  // Every crew member's simulated history, with today's check-in applied to the last day.
+  const recordsByCrew = useMemo(() => {
+    const out: Record<string, DayRecord[]> = {};
+    if (!mission) return out;
+    for (const m of crew) out[m.id] = withCheckIn(recordsFor(mission, m.id), missionCheckIns[m.id]);
+    return out;
+  }, [mission, missionCheckIns]);
+
+  const activeProfileId = selectedProfile ?? account;
+  const records = recordsByCrew[activeProfileId] ?? [];
+  const todayCheckIn = missionCheckIns[activeProfileId];
+  const activeCases = useMemo(() => casesFrom(log).filter((c) => !c.ended && c.mission === chosen), [log, chosen]);
+
+  // CHIRON LINK → CORE: each band's simulated readings, plus any new reading the band has sent.
+  const links = useMemo(() => Object.fromEntries(crew.map((m) => [m.id, withLinkEvents(linkFor(m.id, recordsByCrew[m.id] ?? [], now), log)])), [recordsByCrew, now, log]);
+
+  const health = useMemo(() => {
+    const out: Record<string, CrewHealth> = {};
+    const active = new Set(activeCases.map((c) => c.patientId));
+    for (const m of crew) {
+      if (!recordsByCrew[m.id]) continue;
+      const h = crewHealth(recordsByCrew[m.id], active.has(m.id));
+      const w = links[m.id]?.warnings ?? [];
+      // A live LINK warning makes the status MEDICAL ATTENTION straight away.
+      out[m.id] = w.length && h.status !== 'attention'
+        ? { ...h, status: 'attention', comment: `LINK WARNING: ${w[0].label.toUpperCase()} ${w[0].value}${w[0].unit}`, reasons: [`LINK warning: ${w.map((x) => `${x.label} ${x.value} ${x.unit} (rule: ${x.rule})`).join('; ')} → MEDICAL ATTENTION.`, ...h.reasons] }
+        : h;
+    }
+    return out;
+  }, [recordsByCrew, activeCases, links]);
+  const memoryAll = useMemo(() => (chosen ? missionMemory(log, chosen, missionCheckIns) : []), [log, chosen, missionCheckIns]);
+
+  // Overall medical system status, most important first.
+  const status = useMemo<SystemStatus>(() => {
+    if (!mission) return { label: 'READY', tone: 'ok', detail: '' };
+    if (activeCases.length) return { label: 'EMERGENCY ACTIVE', tone: 'alert', detail: `${activeCases.length} active emergency response(s).` };
+    const stock = inventoryNow(log, mission.id);
+    const gaps = kb.filter((p) => p.status === 'approved' && p.missions.includes(mission.id)).flatMap((p) => checkResources(p, stock)).filter((c) => !c.ok && !c.alternative);
+    if (gaps.length) return { label: 'CHECK STOCK', tone: 'warn', detail: `Missing for an approved procedure: ${[...new Set(gaps.map((g) => g.name))].join(', ')}.` };
+    const offline = Object.values(links).filter((l) => !l.connected).length;
+    if (offline) return { label: 'LINK OFFLINE', tone: 'warn', detail: `${offline} wearable(s) disconnected.` };
+    return { label: 'READY', tone: 'ok', detail: 'Protocols, equipment and wearables ready.' };
+  }, [mission, activeCases, log, kb, links]);
+
+  // One live line for each of the four main functions on the home screen.
+  const tiles = useMemo(() => {
+    if (!mission) return { train: '', respond: '' };
+    const due = skillStatus(account, mission.id).filter((s) => s.due).length;
+    return {
+      train: due ? `${due} refresher${due > 1 ? 's' : ''} due for you` : 'Your skills are up to date',
+      respond: activeCases.length ? `${activeCases.length} ACTIVE EMERGENCY` : status.label === 'CHECK STOCK' ? 'No emergencies · check stock' : 'No active emergencies',
+    };
+  }, [mission, health, account, recordsByCrew, activeCases, status]);
 
   const marks = useMemo(() => {
     if (!records.length || !chosen) return [];
     const out = [...buildMarks(records), ...(extraMarks[chosen] ?? [])];
-    // Emergencies from the shared log, so every crew device shows the same history.
-    for (const c of casesFrom(log).filter((x) => x.mission === chosen)) {
-      const who = crew.find((m) => m.id === c.patientId)?.name ?? c.patientId;
-      out.push({ day: records.length - 1, kind: 'noticed', title: `Emergency: ${who}`, detail: `${c.category} emergency started at ${new Date(c.startedAt).toISOString().slice(11, 16)} GMT. ${c.ended ? 'Stood down.' : 'Still active.'}` });
+    for (const c of casesFrom(log).filter((x) => x.mission === chosen && x.patientId === activeProfileId)) {
+      out.push({ day: records.length - 1, kind: 'noticed', title: 'Emergency response', detail: `${c.category} emergency started at ${new Date(c.startedAt).toISOString().slice(11, 16)} GMT. ${c.ended ? 'Closed.' : 'Still active.'}` });
     }
     if (todayCheckIn) {
       const extra = todayCheckIn.symptoms.length ? ` Symptoms: ${todayCheckIn.symptoms.join(', ').toLowerCase()}.` : '';
       out.push({ day: records.length - 1, kind: 'logged', title: `Daily check-in at ${todayCheckIn.time} GMT`, detail: `Logged and added to today's report to Earth.${extra}` });
     }
     return out;
-  }, [records, todayCheckIn, extraMarks, chosen, log]);
+  }, [records, todayCheckIn, extraMarks, chosen, log, activeProfileId]);
 
   const addMark = (m: Mark) => chosen && setExtraMarks((x) => ({ ...x, [chosen]: [...(x[chosen] ?? []), m] }));
 
@@ -218,24 +241,47 @@ export default function App() {
   const pick = (id: MissionId) => {
     setChosen(id);
     setSelectedProfile(undefined);
+    setPage('home');
     setHovered(undefined);
     setMode('watch');
     setSelection({ from: missions[id].today, to: missions[id].today });
     setPhase('launch');
+    try { localStorage.setItem(MISSION_KEY, id); } catch { /* ignore */ }
     setTimeout(() => setPhase('mission'), 1700);
   };
 
   const back = () => {
+    try { localStorage.removeItem(MISSION_KEY); } catch { /* ignore */ }
+    setSelectedProfile(undefined);
     setChosen(undefined);
     setCheckInOpen(false);
     setMode('watch');
+    setPage('home');
     setPhase('select');
   };
 
   const openTeach = (id?: string) => { setTeachStart(id); setMode('teach'); };
-  const openAct = (reason?: string) => { setActReason(reason); setJoinEid(undefined); setMode('act'); };
+  const openAct = (reason?: string, patient?: string) => { setActReason(reason); setActPatient(patient); setJoinEid(undefined); setMode('act'); };
   const joinAct = (eid: string) => { setJoinEid(eid); setMode('act'); };
-  const leaveAct = () => { setActReason(undefined); setJoinEid(undefined); setMode('watch'); };
+  const leaveAct = () => { setActReason(undefined); setActPatient(undefined); setJoinEid(undefined); setMode('watch'); };
+  const member = crew.find((m) => m.id === selectedProfile);
+
+  // The demonstration: each step opens the real screen and, where needed, makes the simulated event happen.
+  const demo = (a: DemoAction) => {
+    if (a === 'prepare') setPage('train');
+    if (a === 'monitor') { publish({ type: 'link-reading', by: 'ana', crewId: 'ana', key: 'spo2', value: 89 }); goHome(); }
+    if (a === 'emergency') openAct('LINK warning: blood oxygen 89%', 'ana');
+    if (a === 'coordinate') setPage('link');
+    if (a === 'recover') openProfile('ana');
+    if (a === 'nasa') setPage('nasa');
+    if (a === 'future') setPage('roadmap');
+    if (a === 'reset') {
+      // Start the story clean: Ana's band back to normal, open emergencies and band alarms closed.
+      publish({ type: 'link-clear', by: 'ana', crewId: 'ana' });
+      for (const c of activeCases) publish({ type: 'end', eid: c.eid, by: account });
+      for (const e of log) if (e.type === 'sos' && !log.some((x) => x.type === 'sos-clear' && x.sosId === e.id)) publish({ type: 'sos-clear', by: account, sosId: e.id });
+    }
+  };
 
   return (
     <div className="relative h-full w-full bg-void">
@@ -265,43 +311,42 @@ export default function App() {
         </div>
       )}
 
-      {/* WATCH: the everyday view */}
+      {/* CHIRON CORE: header on every screen, then the current page */}
       {phase === 'mission' && mission && (
         <div className="fade-in absolute inset-0 flex flex-col overflow-y-auto">
-          <MissionDashboard mission={mission} mode={mode} crew={crew} account={account} selectedProfile={selectedProfile}
-            activePatientIds={[...new Set(casesFrom(log).filter((item) => !item.ended && item.mission === mission.id).map((item) => item.patientId))]}
-            overallStatus={casesFrom(log).some((item) => !item.ended && item.mission === mission.id)
-              ? 'Emergency response in progress'
-              : todayCheckIn
-                ? 'All clear · no immediate crew actions pending'
-                : 'Routine crew check-in pending'}
-            statusNeedsAttention={casesFrom(log).some((item) => !item.ended && item.mission === mission.id)}
-            gmt={gmt} listening={voice.listening} speaking={voice.speaking} voiceSupported={voice.supported}
-            onAccount={setAccount}
-            onProfile={(id) => { setSelectedProfile(id); setMode('watch'); }}
-            onCloseProfile={() => setSelectedProfile(undefined)}
-            onEmergency={() => openAct()}
-            onVoice={voice.toggle} onStopSpeaking={stopSpeaking} onChangeMission={back} />
+          <CoreHeader mission={mission} crew={crew} account={account} gmt={gmt} online={online} status={status} page={page}
+            listening={voice.listening} speaking={voice.speaking} voiceSupported={voice.supported}
+            onHome={goHome} onAccount={setAccount} onVoice={voice.toggle} onStopSpeaking={stopSpeaking} onChangeMission={back}
+            onLibrary={() => { setLibraryEntry(undefined); setLibraryOpen(true); }} onRoadmap={() => setPage('roadmap')} onOpen={(p) => { setMode('watch'); setPage(p); }} />
 
-          {voice.message && <div role="status" className="mx-4 -mt-2 mb-2 text-right text-xs text-[#9be7ef] md:mx-8">{voice.message}</div>}
+          {voice.message && <div role="status" className="mx-auto w-full max-w-[1200px] px-4 pt-2 text-right text-sm text-gold md:px-8">{voice.message}</div>}
 
-          {mode === 'watch' && selectedProfile && (
-            <>
-              <div className="flex flex-1 items-start px-4 py-2 md:px-8">
-                <Today mission={mission} records={records} checkedIn={!!todayCheckIn || selectedProfile !== account}
-                  name={crew.find((member) => member.id === selectedProfile)?.name.split(' ')[0]}
-                  onCheckIn={() => selectedProfile === account && setCheckInOpen(true)} onTeach={openTeach} onEmergency={() => openAct()} />
-              </div>
-              <HealthRecord mission={mission} records={records} marks={marks} selection={selection} onSelect={setSelection} />
-              <HealthSupport key={selectedProfile} astronautId={selectedProfile}
-                astronautName={crew.find((member) => member.id === selectedProfile)?.name ?? 'Crew member'}
-                mission={mission} records={records} />
-            </>
+          {page === 'home' && (
+            <HomePage mission={mission} crew={crew} account={account} health={health} links={links} now={now} tiles={tiles}
+              onProfile={openProfile} onPage={(p) => { setPage(p); setMode('watch'); }}
+              checkedIn={!!missionCheckIns[account]} onCheckIn={() => { openProfile(account); setCheckInOpen(true); }} />
           )}
+          {page === 'profile' && member && health[member.id] && (
+            <ProfilePage mission={mission} member={member} account={account} health={health[member.id]} link={links[member.id]} now={now}
+              records={records} marks={marks} selection={selection} onSelect={setSelection}
+              checkedIn={!!todayCheckIn} symptoms={todayCheckIn?.symptoms ?? []}
+              memory={missionMemory(log, mission.id, missionCheckIns, member.id)}
+              onCheckIn={() => setCheckInOpen(true)} onTeach={openTeach} onEmergency={() => openAct(undefined, member.id)}
+              onReading={(values) => setCheckIns((c) => {
+                const prev = c[mission.id]?.[account];
+                return { ...c, [mission.id]: { ...c[mission.id], [account]: { values: { ...prev?.values, ...values }, symptoms: prev?.symptoms ?? [], time: gmt, at: Date.now() } } };
+              })} />
+          )}
+          {page === 'train' && <TrainPage mission={mission} crew={crew} account={account} records={recordsByCrew[account] ?? []} kb={kb} onGuide={(id) => openTeach(id)} onStock={() => setPage('respond')} />}
+          {page === 'respond' && <RespondPage mission={mission} kb={kb} memory={memoryAll} onStart={() => openAct()} onJoin={joinAct} />}
+          {page === 'link' && <LinkPage mission={mission.id} crew={crew} links={links} kb={kb} now={now} onProfile={openProfile} />}
+          {page === 'roadmap' && <RoadmapPage onOpen={(p) => setPage(p)} />}
+          {page === 'nasa' && <NasaPage onPage={(p) => (p === 'profile' ? openProfile(account) : setPage(p))} />}
+          {page === 'demo' && <DemoPage mission={mission} onAction={demo} />}
         </div>
       )}
 
-      {/* TEACH: appears when the astronaut needs to learn or follow a procedure */}
+      {/* TEACH: a procedure, step by step */}
       {phase === 'mission' && mission && mode === 'teach' && (
         <Teach startWith={teachStart} uploaded={uploaded}
           onUpload={(p) => setUploaded((u) => [...u, p])}
@@ -312,43 +357,31 @@ export default function App() {
 
       {/* ACT: takes over in an emergency */}
       {phase === 'mission' && mission && mode === 'act' && (
-        <Act mission={mission} reason={actReason} kb={kb} account={account} joinEid={joinEid} onLeave={leaveAct} />
+        <Act mission={mission} reason={actReason} kb={kb} account={account} joinEid={joinEid} patient={actPatient} onLeave={leaveAct} />
       )}
 
-      {libraryOpen && <KnowledgeBase kb={kb} onChange={setKb} onClose={() => setLibraryOpen(false)} />}
-
-      {inventoryOpen && mission && (
-        <div className="fixed inset-0 z-[50] flex items-center justify-center bg-[#020408]/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="inventory-title">
-          <section className="max-h-[85vh] w-full max-w-2xl overflow-y-auto border border-marble/20 bg-[#080d14] p-5 md:p-7">
-            <div className="flex items-start justify-between gap-4">
-              <div><div className="font-mono text-[10px] tracking-[0.2em] text-gold">MISSION SUPPORT</div><h2 id="inventory-title" className="mt-1 text-xl font-semibold text-marble">Medical equipment</h2></div>
-              <button type="button" onClick={() => setInventoryOpen(false)} className="min-h-11 border border-marble/20 px-4 text-sm text-marble/75 hover:text-marble">Close</button>
-            </div>
-            <ul className="mt-5 divide-y divide-marble/10 border-y border-marble/10">
-              {inventoryFor(mission.id).map((item) => (
-                <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                  <div><div className="text-sm text-marble">{item.name}</div><div className="mt-1 text-xs text-marble/50">{item.location} · quantity {item.quantity}</div></div>
-                  <span className={`font-mono text-[10px] tracking-wider ${item.status === 'available' && item.quantity > 0 ? 'text-[#7bd5b8]' : 'text-[#e39b4b]'}`}>{item.status.toUpperCase()}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-4 text-xs text-marble/45">Simulated manifest for demonstration; verify the physical inventory before use.</p>
-          </section>
-        </div>
+      {libraryOpen && mission && (
+        <Library mission={mission.id} kb={kb} startWith={libraryEntry}
+          onGuide={(id) => { setLibraryOpen(false); setLibraryEntry(undefined); setTeachStart(id); setMode('teach'); }}
+          onClose={() => { setLibraryOpen(false); setLibraryEntry(undefined); }} />
       )}
 
       {checkInOpen && mission && (
         <CheckIn
-          latest={records[records.length - 1]}
+          latest={recordsByCrew[account][recordsByCrew[account].length - 1]}
           onClose={() => setCheckInOpen(false)}
           onTeach={(procedureId) => { setTeachStart(procedureId); setMode('teach'); }}
+          crewId={account}
           onDone={(values, symptoms) => {
-            setCheckIns((c) => ({ ...c, [mission.id]: { ...c[mission.id], [account]: { values, symptoms, time: gmt } } }));
+            setCheckIns((c) => ({ ...c, [mission.id]: { ...c[mission.id], [account]: { values, symptoms, time: gmt, at: Date.now() } } }));
           }}
         />
       )}
 
-      {phase === 'mission' && mission && <EmergencyAlerts mission={mission.id} onJoin={joinAct} />}
+      {phase === 'mission' && mission && !signedIn && <SignIn crew={crew} mission={mission} onDone={setAccount} />}
+
+      {phase === 'mission' && mission && <EmergencyAlerts mission={mission.id} account={account} inResponse={mode === 'act'} viewingEid={mode === 'act' ? joinEid : undefined} onJoin={joinAct} />}
+      {phase === 'mission' && mission && <SosAlerts hidden={mode === 'act'} account={account} onRespond={(id) => openAct('LINK emergency button pressed', id)} />}
 
       {voiceConfirm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#020408]/85 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="voice-confirm-title">
@@ -366,10 +399,10 @@ export default function App() {
 
       {phase === 'mission' && (
         <button type="button" onClick={() => mode !== 'act' && openAct()} disabled={mode === 'act'}
-          className="fixed bottom-4 right-4 z-[55] flex min-h-12 items-center gap-2 border border-[#e45b5b]/75 bg-[#1a0b10]/95 px-4 font-mono text-[10px] font-semibold tracking-[0.16em] text-[#ff8585] shadow-lg backdrop-blur transition hover:bg-[#e45b5b]/20 disabled:cursor-default"
-          aria-label={mode === 'act' ? 'Emergency response mode active' : 'Open emergency response'}>
-          <span className="h-2 w-2 animate-pulse rounded-full bg-[#e45b5b]" />
-          {mode === 'act' ? 'EMERGENCY MODE' : 'EMERGENCY'}
+          className="fixed bottom-4 right-4 z-[55] flex min-h-14 items-center gap-2 border-2 border-[#e45b5b] bg-[#1a0b10]/95 px-5 font-mono text-xs font-semibold tracking-[0.16em] text-[#ff8585] shadow-lg backdrop-blur transition hover:bg-[#e45b5b]/20 disabled:cursor-default"
+          aria-label={mode === 'act' ? 'Emergency mode active' : 'Open emergency mode'}>
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#e45b5b]" />
+          EMERGENCY MODE
         </button>
       )}
       <div className="pointer-events-none fixed bottom-1 left-3 z-40 text-[10px] text-mute/60">
