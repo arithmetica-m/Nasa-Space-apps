@@ -6,6 +6,7 @@ import { crewSummary, statusColor, statusLabel, type CrewHealth } from '../lib/c
 import { ago, type LinkStatus } from '../link/link';
 import { MissionTimeline } from './MissionTimeline';
 import { MissionDial } from './SystemMap';
+import { Avatar } from './Avatar';
 
 export type Page = 'home' | 'profile' | 'train' | 'respond' | 'link' | 'roadmap' | 'nasa' | 'demo';
 export const PAGE_NAME: Record<Page, string> = {
@@ -113,7 +114,6 @@ export function CoreHeader(p: HeaderProps) {
   );
 }
 
-const initials = (name: string) => name.split(/\s+/).map((x) => x[0]).slice(0, 2).join('');
 export const roleOf = (m: CrewMember) => m.position.split(' · ').pop()!.toUpperCase();
 
 interface HomeProps {
@@ -179,7 +179,7 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
               className="flex min-h-[170px] flex-col border border-marble/10 bg-void/75 p-5 text-left backdrop-blur-md transition hover:border-gold/60 hover:bg-void/90"
               style={{ borderTop: `4px solid ${color}` }}>
               <div className="flex items-center gap-3">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-gold/40 bg-void/60 font-mono text-base text-gold">{initials(m.name)}</span>
+                <Avatar id={m.id} name={m.name} size={52} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-serif text-lg tracking-[0.1em] text-marble">
                     {m.name.toUpperCase()}{m.id === account && <span className="ml-2 font-mono text-[10px] tracking-[0.2em] text-gold">YOU</span>}
@@ -232,6 +232,11 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
       </section>
 
       <MissionTimeline mission={mission} />
+      <nav aria-label="About this prototype" className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => onPage('demo')} className="min-h-12 bg-gold px-5 font-mono text-xs tracking-[0.18em] text-void hover:bg-marble">▶ DEMONSTRATION</button>
+        <button type="button" onClick={() => onPage('nasa')} className="min-h-12 border border-gold/60 bg-void/75 px-5 font-mono text-xs tracking-[0.18em] text-gold hover:bg-gold/10">NASA DATA IN CHIRON</button>
+        <button type="button" onClick={() => onPage('roadmap')} className="min-h-12 border border-marble/20 bg-void/75 px-5 font-mono text-xs tracking-[0.18em] text-marble/80 hover:border-gold/60">ABOUT CHIRON</button>
+      </nav>
       <p className="flex items-center gap-2 font-mono text-[10px] tracking-[0.12em] text-marble/40"><Map size={12} /> ALL HEALTH AND WEARABLE DATA IS SIMULATED · STATUS USES DEMO RULES, NOT APPROVED MEDICAL RULES</p>
     </main>
   );

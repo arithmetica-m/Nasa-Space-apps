@@ -145,7 +145,7 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
-    id: 'skin', name: 'Skin', words: /rash|itch|skin|cut|graze|blister|swell|hive/i, parts: ['skin', 'arms'],
+    id: 'skin', name: 'Skin', words: /rash|itch|skin|cut|graze|blister|swell|hive/i, parts: ['skin', 'arms'], library: 'LIB-SKIN',
     causes: [
       { id: 'dry', name: 'Dry cabin air irritating the skin', base: 1.5 },
       { id: 'allergy', name: 'An allergy', base: 1 },

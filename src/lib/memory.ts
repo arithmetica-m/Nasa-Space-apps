@@ -1,6 +1,7 @@
 import type { MissionId } from '../types';
 import type { ChironEvent } from '../emergency/events';
-import { casesFrom } from '../emergency/plan';
+import { casesFrom, roleName } from '../emergency/plan';
+import type { RoleId } from '../emergency/types';
 import { crew, procedures } from '../emergency/data';
 import { indicators } from '../data/indicators';
 import { categoryText } from '../emergency/report';
@@ -40,6 +41,8 @@ export function missionMemory(log: ChironEvent[], mission: MissionId, checkIns: 
     out.push({ t: c.startedAt, kind: 'Emergency', who: name(c.patientId), title: `${categoryText[c.category]}: ${name(c.patientId)}`, detail: c.ended ? 'closed' : 'still active', group: c.eid });
     for (const [step, o] of Object.entries(c.outcomes)) out.push({ t: o.t, kind: 'Step', who: name(o.by), title: `${o.outcome === 'cannot' ? 'Could not do' : o.outcome === 'done' ? 'Done' : `Answered ${o.outcome}`}: ${short(stepText(step))}`, detail: name(o.by), group: c.eid });
     for (const ms of c.measures) out.push({ t: ms.t, kind: 'Measurement', who: name(c.patientId), title: `${measureName(ms.key)}: ${ms.value}`, detail: ms.source === 'link' ? 'from LINK wearable' : `measured by ${name(ms.by)}`, group: c.eid });
+    for (const [role, a] of Object.entries(c.assignments) as [RoleId, { crewId: string; t: number; by: string }][]) out.push({ t: a.t, kind: 'Task', who: name(a.crewId), title: `${roleName[role]}: ${name(a.crewId)}`, detail: `chosen by ${name(a.by)}`, group: c.eid });
+    for (const e of log) if (e.type === 'medical-access' && e.eid === c.eid) out.push({ t: e.t, kind: 'Record', who: name(e.by), title: `${name(e.by)} opened ${name(e.patientId)}’s medical record`, detail: e.reason || undefined, group: c.eid });
     for (const msg of c.messages.filter((x) => x.report)) out.push({ t: msg.sentAt || c.startedAt, kind: 'Earth', who: 'CHIRON', title: `Sent to Earth: ${msg.title}`, group: c.eid });
   }
   for (const r of practiceRecords()) {

@@ -168,7 +168,7 @@ export function Frieze({ records, totalDays, marks, selection, onSelect }: Props
 
         {/* Events, placed on the line at their day */}
         {emergencyMarks.map((m) => (
-          <g key={`${m.day}-${m.kind}`} className="cursor-pointer"
+          <g key={`${m.day}-${m.kind}-${m.title}-${marks.indexOf(m)}`} className="cursor-pointer"
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
             onClick={() => onSelect({ from: m.day, to: m.day })}

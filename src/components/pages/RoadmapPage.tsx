@@ -1,6 +1,7 @@
 import { SOURCES } from '../../library/entries';
 import { PageShell, Panel } from './ui';
 import { SystemMap } from '../SystemMap';
+import { VisionConcept } from '../VisionConcept';
 import type { Page } from '../MissionDashboard';
 
 // ABOUT CHIRON: what works today, what is simulated, and what is a future concept. Kept honest.
@@ -55,6 +56,10 @@ export function RoadmapPage({ onOpen }: { onOpen: (p: Page) => void }) {
           </Panel>
         ))}
       </div>
+      <Panel title="CHIRON VISION" tag="FUTURE CONCEPT">
+        <VisionConcept />
+        <p className="mt-2 text-base text-marble/75">A helmet or suit display for when hands are busy. It would need hardware built and tested for spaceflight: ordinary consumer AR glasses are not assumed to work on an EVA.</p>
+      </Panel>
       <Panel title="RULES CHIRON FOLLOWS">
         <ul className="space-y-1 text-sm text-marble/85">
           {['Every reading shows where it came from and when.', 'Simulated data is labelled SIMULATED.', 'Old data is never shown as live.', 'Missing data is shown as missing, never guessed.',

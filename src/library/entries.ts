@@ -210,6 +210,24 @@ export const LIBRARY: LibraryEntry[] = [
     basis: [{ claim: 'Spinal and intervertebral disc changes are tracked NASA spaceflight risks.', source: SOURCES.hrpRisks }],
   },
   {
+    id: 'LIB-SKIN', title: 'Rash, itchy skin or a small wound', system: 'immune', ...RELEASE,
+    triggers: { symptoms: ['Rash', 'Itchy skin', 'Cut or graze'] },
+    summary: 'Skin problems are among the most common complaints in space. Cabin air is dry, washing is limited, and small wounds can heal more slowly.',
+    doNow: [
+      'Keep the area clean and dry. Use the skin wipes from the hygiene kit.',
+      'Do not scratch. Cover a cut or graze with a clean dressing from the medical kit.',
+      'Think about what is new: gloves, wipes, clothing, food. Stop using it and tell the medical officer.',
+      'Ask the medical officer before using any cream or medicine from the kit.',
+    ],
+    getHelpNow: ['Swelling of the lips, face or throat, or trouble breathing', 'A rash that spreads fast or comes with fever', 'A wound that is red, hot, swollen or leaking', 'Bleeding that does not stop with firm pressure'],
+    personal: [{ match: ['latex'], note: 'Your record shows a latex allergy: use only the latex-free gloves and dressings.' }],
+    reasoning: 'Keeping skin clean and covered lowers the chance of infection while the immune system is under spaceflight stress. Swelling with breathing trouble can be a severe allergic reaction and needs help at once.',
+    basis: [
+      { claim: 'Immune changes in spaceflight are a tracked NASA risk, which makes infection of small wounds more likely.', source: SOURCES.hrpRisks },
+      { claim: 'In-flight medical care covers common minor conditions with the onboard medical kit.', source: SOURCES.inFlight },
+    ],
+  },
+  {
     id: 'LIB-EYES', title: 'Vision changes or eye strain', system: 'sensorimotor', ...RELEASE,
     triggers: { readings: [{ id: 'vision', direction: 'low' }], symptoms: ['Eye strain'] },
     summary: 'In space, fluid moving toward the head can slowly change the shape of the eye (called SANS). Tired eyes from screens are also common. Any change in sight should be recorded.',
