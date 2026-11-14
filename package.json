@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit -p . && vite build",
     "preview": "vite preview",
-    "fetch-nasa": "node scripts/fetch-nasa.mjs"
+    "fetch-nasa": "node scripts/fetch-nasa.mjs",
+    "relay": "node scripts/relay.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.117.3",
@@ -25,6 +26,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.6.3",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "ws": "^8.18.0"
   }
 }

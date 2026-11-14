@@ -16,8 +16,16 @@ import { HealthRecord } from './components/HealthRecord';
 import { CheckIn } from './components/CheckIn';
 import { Today } from './components/watch/Today';
 import { Teach } from './components/teach/Teach';
-import { Act, type ActResult } from './components/act/Act';
+import { Act } from './components/act/Act';
+import { LiveBanner } from './components/act/LiveBanner';
+import { KnowledgeBase } from './components/KnowledgeBase';
 import type { Selection } from './components/Frieze';
+import { crew, procedures as emergencyProcedures } from './emergency/data';
+import type { Procedure as EmergencyProcedure } from './emergency/types';
+import { useAccount } from './emergency/account';
+import { useLog } from './emergency/sync';
+import { casesFrom } from './emergency/plan';
+import { usePersisted } from './emergency/store';
 
 // The whole app is one continuous scene; each phase is a different camera view of it.
 type Phase = 'intro' | 'select' | 'launch' | 'mission';
@@ -66,6 +74,12 @@ export default function App() {
   const [actReason, setActReason] = useState<string>();
   const [uploaded, setUploaded] = useState<Procedure[]>([]);
   const [extraMarks, setExtraMarks] = useState<Partial<Record<MissionId, Mark[]>>>({});
+  const [joinEid, setJoinEid] = useState<string>();
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [account, setAccount] = useAccount();
+  // The mission's medical knowledge base, kept on the device (works offline).
+  const [kb, setKb] = usePersisted<EmergencyProcedure[]>('chiron-kb-v1', () => emergencyProcedures);
+  const log = useLog();
   const gmt = useGmt();
   const aspect = useAspect();
 
@@ -84,12 +98,17 @@ export default function App() {
   const marks = useMemo(() => {
     if (!records.length || !chosen) return [];
     const out = [...buildMarks(records), ...(extraMarks[chosen] ?? [])];
+    // Emergencies from the shared log, so every crew device shows the same history.
+    for (const c of casesFrom(log).filter((x) => x.mission === chosen)) {
+      const who = crew.find((m) => m.id === c.patientId)?.name ?? c.patientId;
+      out.push({ day: records.length - 1, kind: 'noticed', title: `Emergency: ${who}`, detail: `${c.category} emergency started at ${new Date(c.startedAt).toISOString().slice(11, 16)} GMT. ${c.ended ? 'Stood down.' : 'Still active.'}` });
+    }
     if (todayCheckIn) {
       const extra = todayCheckIn.symptoms.length ? ` Symptoms: ${todayCheckIn.symptoms.join(', ').toLowerCase()}.` : '';
       out.push({ day: records.length - 1, kind: 'logged', title: `Daily check-in at ${todayCheckIn.time} GMT`, detail: `Logged and added to today's report to Earth.${extra}` });
     }
     return out;
-  }, [records, todayCheckIn, extraMarks, chosen]);
+  }, [records, todayCheckIn, extraMarks, chosen, log]);
 
   const addMark = (m: Mark) => chosen && setExtraMarks((x) => ({ ...x, [chosen]: [...(x[chosen] ?? []), m] }));
 
@@ -118,13 +137,9 @@ export default function App() {
   };
 
   const openTeach = (id?: string) => { setTeachStart(id); setMode('teach'); };
-  const openAct = (reason?: string) => { setActReason(reason); setMode('act'); };
-
-  const standDown = (r: ActResult) => {
-    addMark({ day: mission!.today, kind: 'noticed', title: `Emergency: ${r.situation.toLowerCase()}`, detail: `Emergency mode for about ${r.minutes} min. ${r.sent ? 'Report sent to Earth.' : 'No report sent to Earth.'}` });
-    setActReason(undefined);
-    setMode('watch');
-  };
+  const openAct = (reason?: string) => { setActReason(reason); setJoinEid(undefined); setMode('act'); };
+  const joinAct = (eid: string) => { setJoinEid(eid); setMode('act'); };
+  const leaveAct = () => { setActReason(undefined); setJoinEid(undefined); setMode('watch'); };
 
   return (
     <div className="relative h-full w-full bg-void">
@@ -167,13 +182,25 @@ export default function App() {
             <div className="order-3 flex w-full justify-center lg:order-none lg:w-auto lg:flex-1">
               <MissionProgress mission={mission} />
             </div>
-            <div className="font-mono text-[10px] tracking-[0.25em] text-marble/70 [text-shadow:0_1px_6px_#000,0_0_2px_#000]">
-              {gmt} GMT · EARTH {mission.delayLabel.toUpperCase()} EACH WAY
+            <div className="flex flex-col items-end gap-1.5">
+              <label className="flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] text-marble/70">
+                SIGNED IN AS
+                <select value={account} onChange={(e) => setAccount(e.target.value)} aria-label="Crew member using this device"
+                  className="border border-marble/20 bg-void px-2 py-1 font-sans text-xs tracking-normal text-marble">
+                  {crew.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </label>
+              <div className="font-mono text-[10px] tracking-[0.25em] text-marble/70 [text-shadow:0_1px_6px_#000,0_0_2px_#000]">
+                {gmt} GMT · EARTH {mission.delayLabel.toUpperCase()} EACH WAY
+              </div>
+              <button onClick={() => setLibraryOpen(true)} className="font-mono text-[10px] tracking-[0.25em] text-mute hover:text-gold">MISSION MEDICAL LIBRARY</button>
             </div>
           </header>
 
+          <LiveBanner mission={mission.id} account={account} kb={kb} onJoin={joinAct} />
+
           <div className="flex flex-1 items-start px-5 py-3 md:px-8">
-            <Today mission={mission} records={records} checkedIn={!!todayCheckIn}
+            <Today mission={mission} records={records} checkedIn={!!todayCheckIn} name={crew.find((c) => c.id === account)?.name.split(" ")[0]}
               onCheckIn={() => setCheckInOpen(true)} onTeach={openTeach} onEmergency={() => openAct()} />
           </div>
 
@@ -191,8 +218,10 @@ export default function App() {
 
       {/* ACT: takes over in an emergency */}
       {phase === 'mission' && mission && mode === 'act' && (
-        <Act mission={mission} records={records} reason={actReason} onStandDown={standDown} />
+        <Act mission={mission} reason={actReason} kb={kb} account={account} joinEid={joinEid} onLeave={leaveAct} />
       )}
+
+      {libraryOpen && <KnowledgeBase kb={kb} onChange={setKb} onClose={() => setLibraryOpen(false)} />}
 
       {checkInOpen && mission && (
         <CheckIn

@@ -15,6 +15,22 @@ npm run dev
 
 Then open the address Vite prints (usually http://localhost:5173).
 
+## Emergencies on several devices
+
+Each device is signed in as one crew member ("Signed in as" on the Watch screen). In an emergency each person sees only their own tasks; everyone else appears as live status. Everything (steps, answers, missing equipment, vitals, crew availability, Earth messages) is an event in a shared log, so all devices show the same picture and the plan adapts as things change.
+
+- **Same computer:** open two browser tabs, sign each in as a different crew member. They sync automatically.
+- **Several devices on one network** (phones, tablets):
+
+```bash
+npm run relay
+npm run dev -- --host
+```
+
+Then open the address Vite prints (Network) on each device. The log is also stored on each device, so CHIRON keeps working offline and catches up when reconnected.
+
+The crew, inventory, cabin readings and procedures are simulated demo records, not clinical guidance. Procedures live in the Mission medical library, where uploads arrive as drafts and only approved versions are used.
+
 ## NASA data
 
 Real NASA data is stored in `src/data/snapshots/` so the app works offline. Refresh it with:

@@ -46,7 +46,7 @@ interface Props {
 }
 
 // WATCH: the everyday view. Only what matters today, in plain words.
-export function Today({ mission, records, checkedIn, onCheckIn, onTeach, onEmergency }: Props) {
+export function Today({ mission, records, checkedIn, onCheckIn, onTeach, onEmergency, name = ASTRONAUT }: Props & { name?: string }) {
   const [open, setOpen] = useState<string>();
   const [science, setScience] = useState(false);
   const today = records.length - 1;
@@ -61,7 +61,7 @@ export function Today({ mission, records, checkedIn, onCheckIn, onTeach, onEmerg
   return (
     <div className="rise w-full max-w-[34rem] border border-marble/10 bg-void/70 p-4 backdrop-blur-md">
       <div className="font-mono text-[10px] tracking-[0.35em] text-gold">⚷ CHIRON IS WATCHING</div>
-      <h2 className="mt-2 font-serif text-2xl tracking-[0.08em] text-marble">{greeting}, {ASTRONAUT}</h2>
+      <h2 className="mt-2 font-serif text-2xl tracking-[0.08em] text-marble">{greeting}, {name}</h2>
       <p className="mt-1 text-sm text-marble/70">
         {attention ? `Since day ${since}, a few readings have been different from your normal. Not an emergency.` : 'Everything is within your normal. Nothing needs your attention.'}
       </p>
