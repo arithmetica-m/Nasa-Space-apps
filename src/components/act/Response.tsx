@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, CircleDashed, Siren, ShieldCheck } from 'lucide-react';
-import type { Procedure, RoleId } from '../../emergency/types';
-import { DELAY_MIN, buildPlan, casesFrom, crewNow, inventoryNow, roleName, rolesOf } from '../../emergency/plan';
+import type { DemoMedicalProfile, Procedure, RoleId } from '../../emergency/types';
+import { DELAY_MIN, buildPlan, casesFrom, crewNow, roleName, rolesOf } from '../../emergency/plan';
 import { publish, useLog, useSyncStatus } from '../../emergency/sync';
 import { newId } from '../../emergency/events';
-import { missions } from '../../data/missions';
+import { crew } from '../../emergency/data';
+import { NEXT_STEP_EVENT, speak } from '../VoiceControl';
 
 const categoryLabel = {
   dcs: 'Pressure or EVA concern',
@@ -12,6 +13,31 @@ const categoryLabel = {
   anaphylaxis: 'Allergic reaction',
   behavioral: 'Crew support',
 };
+
+function isDemoMedicalProfile(value: unknown): value is DemoMedicalProfile {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return ['allergies', 'medications', 'restrictions', 'history'].every((field) => Array.isArray(record[field]))
+    && ['author', 'version', 'baselineNotes', 'updatedAt'].every((field) => typeof record[field] === 'string')
+    && ['sample', 'draft', 'demo-reviewed'].includes(String(record.status))
+    && (record.reviewedAt === undefined || typeof record.reviewedAt === 'string');
+}
+
+function localMedicalProfile(crewId: string): DemoMedicalProfile | undefined {
+  try {
+    const raw = localStorage.getItem(`chiron-medical-profile-v1-${crewId}`);
+    if (!raw) return undefined;
+    const value: unknown = JSON.parse(raw);
+    if (!isDemoMedicalProfile(value)) {
+      console.warn('Ignoring malformed local demo medical profile.');
+      return undefined;
+    }
+    return value;
+  } catch (error) {
+    console.warn('Could not read the local demo medical profile.', error);
+    return undefined;
+  }
+}
 
 interface Props {
   eid: string;
@@ -27,6 +53,20 @@ export function Response({ eid, kb, account, onLeave }: Props) {
   const c = cases.find((item) => item.eid === eid);
   const plan = useMemo(() => c ? buildPlan(c, kb, log, cases) : undefined, [c, kb, log, cases]);
   const [cannot, setCannot] = useState<string>();
+  const [accessReason, setAccessReason] = useState('Emergency assessment');
+  const [medicalAccessed, setMedicalAccessed] = useState(false);
+  const advanceStepRef = useRef<() => 'advanced' | 'answer' | 'waiting' | 'none'>(() => 'none');
+  useEffect(() => {
+    const onNextStep = () => {
+      const result = advanceStepRef.current();
+      speak(result === 'advanced' ? 'Moving to the next step.'
+        : result === 'answer' ? 'Please answer the question on screen.'
+          : result === 'waiting' ? 'This step is waiting for your crew.'
+            : 'There are no more steps for you.');
+    };
+    window.addEventListener(NEXT_STEP_EVENT, onNextStep);
+    return () => window.removeEventListener(NEXT_STEP_EVENT, onNextStep);
+  }, []);
 
   if (!c || !plan) return null;
   if (c.ended) {
@@ -39,19 +79,41 @@ export function Response({ eid, kb, account, onLeave }: Props) {
     );
   }
 
-  const mission = missions[c.mission];
   const me = crewNow(log).find((member) => member.id === account);
+  const patientRecord = crew.find((member) => member.id === c.patientId);
+  const localProfile = localMedicalProfile(c.patientId);
+  const reviewedMedical = localProfile?.status === 'demo-reviewed' ? localProfile : undefined;
+  const relevantMedical = reviewedMedical ?? {
+    allergies: patientRecord?.medical.allergies ?? [],
+    medications: patientRecord?.medical.medications ?? [],
+    restrictions: patientRecord?.medical.restrictions ?? [],
+    history: patientRecord?.medical.history ?? patientRecord?.medical.conditions ?? [],
+    baselineNotes: patientRecord?.medical.notes ?? '',
+  };
   const myRoles = rolesOf(plan.roles, account);
   const isPatient = c.patientId === account;
   const isLead = myRoles.includes('lead');
+  const isMedicalAccessAuthorized = isLead || !!me?.qualifications.some((qualification) => qualification === 'cmo' || qualification === 'cmo-backup');
   const mine = plan.tasks.filter((task) => myRoles.includes(task.step.role));
-  const inventory = inventoryNow(log, c.mission);
+  const activeTask = mine.find((task) => task.status === 'ready')
+    ?? mine.find((task) => task.status === 'blocked')
+    ?? mine.find((task) => task.status === 'waiting');
   const latest = [...c.vitals].reverse()[0];
 
   const complete = (stepId: string, outcome: 'done' | 'cannot' | 'yes' | 'no') => {
     publish({ type: 'step', eid, by: account, stepId, outcome });
     setCannot(undefined);
   };
+  const advanceStep = (): 'advanced' | 'answer' | 'waiting' | 'none' => {
+    if (activeTask?.status === 'ready' && activeTask.step.ask) return 'answer';
+    if (activeTask?.status === 'ready') {
+      if (activeTask.step.verify === 'clinical' && !c.verified.has(activeTask.step.id)) return 'waiting';
+      complete(activeTask.step.id, 'done');
+      return 'advanced';
+    }
+    return activeTask ? 'waiting' : 'none';
+  };
+  advanceStepRef.current = advanceStep;
   const reportStatus = () => {
     const finished = plan.tasks.filter((task) => task.status === 'done').length;
     const message = {
@@ -65,141 +127,145 @@ export function Response({ eid, kb, account, onLeave }: Props) {
     };
     publish({ type: 'message', eid, by: account, message });
   };
+  const openMedicalRecord = () => {
+    publish({ type: 'medical-access', eid, by: account, patientId: c.patientId, reason: accessReason });
+    setMedicalAccessed(true);
+  };
+  const medicalAccessEvents = log.filter((event) => event.type === 'medical-access' && event.eid === eid && event.patientId === c.patientId);
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col overflow-y-auto bg-[#080b11]" style={{ animation: 'fade-in 0.3s ease-out' }}>
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-[#e45b5b]/50 bg-[#100c10]/95 px-4 py-4 backdrop-blur md:px-8">
         <Siren className="shrink-0 animate-pulse text-[#ff8585]" size={20} />
         <div className="mr-auto min-w-0">
-          <div className="font-mono text-[10px] tracking-[0.2em] text-[#ff8585]">ACT · CREW RESPONSE</div>
-          <h1 className="mt-1 truncate text-lg font-semibold text-marble md:text-xl">{categoryLabel[c.category]} · {plan.patient.name}</h1>
-          <div className="mt-1 text-xs text-marble/60">{mission.name} · {mission.delayLabel} to Earth · {sync === 'relay' ? 'Crew devices connected' : 'Local crew log'}</div>
+          <div className="font-mono text-[10px] tracking-[0.2em] text-[#ff8585]">EMERGENCY · {sync === 'relay' ? 'CREW CONNECTED' : 'LOCAL RESPONSE'}</div>
+          <h1 className="mt-1 truncate text-lg font-semibold text-marble md:text-xl">{plan.patient.name} · {categoryLabel[c.category]}</h1>
         </div>
         <button onClick={onLeave} className="flex min-h-11 items-center gap-2 border border-marble/25 px-3 text-xs text-marble/75 hover:border-marble/50"><ArrowLeft size={14} /> OVERVIEW</button>
         {isLead && <button onClick={() => publish({ type: 'end', eid, by: account })} className="min-h-11 border border-marble/40 px-4 text-xs text-marble hover:border-marble">CLOSE RESPONSE</button>}
       </header>
 
       <main className="mx-auto w-full max-w-4xl flex-1 p-4 pb-10 md:p-8">
-        <section className="mb-5 border border-marble/10 bg-marble/[0.03] p-4 md:p-5">
-          <div className="font-mono text-[10px] tracking-[0.17em] text-gold">SCENARIO PROCEDURE</div>
-          <h2 className="mt-1 text-base font-semibold text-marble">{plan.procedure?.title ?? 'No matching scenario procedure loaded'}</h2>
-          <p className="mt-2 text-sm leading-relaxed text-marble/60">
-            Hypothetical training workflow informed by spaceflight health research. This is not a NASA-approved medical procedure or clinical guidance; follow mission-authorized instructions.
+        <section className="mb-4 border border-marble/10 bg-marble/[0.03] p-3">
+          <p className="text-xs font-mono tracking-wider text-marble/65">
+            {plan.missing ? 'NO GUIDE · USE APPROVED PAPER INSTRUCTIONS' : 'TRAINING GUIDE · FOLLOW APPROVED MISSION INSTRUCTIONS'}
           </p>
         </section>
 
-        {plan.missing && (
-          <div className="mb-5 border border-[#e39b4b]/60 bg-[#e39b4b]/[0.07] p-4 text-sm text-marble">
-            No scenario is loaded for this event. Do not improvise from CHIRON; use mission-authorized instructions and contact the medical lead.
-          </div>
+        {plan.alerts[0] && <p role="alert" className="mb-4 border-l-4 border-[#e45b5b] bg-[#e45b5b]/10 px-4 py-3 text-lg font-medium text-marble">{plan.alerts[0]}</p>}
+        {(plan.warnings.length > 0 || plan.alerts.length > 1) && (
+          <details className="mb-4 border border-[#e39b4b]/40 p-3 text-sm text-[#f3c28d]">
+            <summary className="cursor-pointer">Important notes</summary>
+            <p className="mt-2">{[...plan.warnings, ...plan.alerts.slice(1)].join(' ')}</p>
+          </details>
         )}
-        {plan.warnings.length > 0 && (
-          <div className="mb-5 border border-[#e39b4b]/50 p-3 text-sm text-[#f3c28d]">{plan.warnings.join(' ')}</div>
-        )}
-        {plan.alerts.length > 0 && (
-          <div className="mb-5 border border-[#e39b4b]/50 bg-[#e39b4b]/[0.05] p-3 text-sm text-[#f3c28d]">
-            {plan.alerts.join(' ')}
-          </div>
+
+        {!isPatient && isMedicalAccessAuthorized && (
+          <details className="mb-4 border border-[#e5c27b]/40 bg-[#e5c27b]/[0.04] p-4">
+            <summary className="cursor-pointer font-semibold text-[#e5c27b]">Emergency medical summary</summary>
+            <div className="font-mono text-[10px] tracking-[0.17em] text-[#e5c27b]">RESTRICTED · EMERGENCY ACCESS</div>
+            <h2 id="medical-record-access-title" className="mt-1 text-base font-semibold text-marble">Relevant medical summary · {plan.patient.name}</h2>
+            <p className="mt-1 text-xs text-marble/55">Visible only during this active response to the assigned response lead or designated medical crew role. Access is recorded in the shared event log. All example records are simulated. This prototype role-gating is not production security.</p>
+            <p className="mt-1 text-[10px] text-[#e5c27b]">{reviewedMedical ? `Demo-reviewed profile · v${reviewedMedical.version} · ${reviewedMedical.author} · ${reviewedMedical.reviewedAt ? new Date(reviewedMedical.reviewedAt).toLocaleString() : 'date unavailable'}` : localProfile?.status === 'draft' ? 'A local profile draft exists but is not shown as reviewed; displaying seeded demo data only.' : 'No demo-reviewed local profile; displaying seeded demo data only.'}</p>
+            {!medicalAccessed ? (
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="min-w-[220px] flex-1 text-xs text-marble/70">
+                  Reason for access
+                  <select value={accessReason} onChange={(event) => setAccessReason(event.target.value)} className="mt-1 min-h-11 w-full border border-marble/20 bg-[#080b11] px-3 text-sm text-marble">
+                    <option>Emergency assessment</option>
+                    <option>Check allergy or medication relevance</option>
+                    <option>Review medical restriction or history</option>
+                  </select>
+                </label>
+                <button type="button" onClick={openMedicalRecord} className="min-h-11 border border-[#e5c27b]/60 px-4 text-xs font-semibold tracking-wider text-[#e5c27b] hover:bg-[#e5c27b]/10">ACCESS & RECORD</button>
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {[
+                  ['Allergies', relevantMedical.allergies],
+                  ['Medications', relevantMedical.medications],
+                  ['Restrictions', relevantMedical.restrictions],
+                  ['Relevant history', relevantMedical.history],
+                ].map(([label, values]) => (
+                  <div key={String(label)} className="border border-marble/10 p-3">
+                    <div className="font-mono text-[9px] tracking-wider text-marble/45">{label}</div>
+                    <div className="mt-1 text-sm text-marble">{Array.isArray(values) && values.length ? values.join(', ') : 'None recorded in this demo profile'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {medicalAccessEvents.length > 0 && (
+              <details className="mt-3 border-t border-marble/10 pt-2">
+                <summary className="cursor-pointer text-xs text-marble/60">Access audit · {medicalAccessEvents.length} event(s)</summary>
+                <ul className="mt-2 space-y-1 text-[11px] text-marble/55">
+                  {medicalAccessEvents.map((event) => event.type === 'medical-access' && <li key={event.id}>{new Date(event.t).toLocaleString()} · {crew.find((member) => member.id === event.by)?.name ?? event.by} · {event.reason}</li>)}
+                </ul>
+              </details>
+            )}
+          </details>
         )}
 
         {isPatient ? (
           <section className="border border-[#e45b5b]/40 bg-[#e45b5b]/[0.06] p-5 text-center md:p-8">
-            <h2 className="text-xl font-semibold text-marble">Your crew is responding</h2>
-            <p className="mt-2 text-sm text-marble/70">Tell your crew if your condition changes. They will coordinate your support.</p>
-            {latest && <p className="mt-3 text-xs text-marble/50">Your latest update was recorded by a crew member.</p>}
+            <h2 className="text-2xl font-semibold text-marble">Your crew is helping you.</h2>
+            <p className="mt-2 text-lg text-marble/70">Tell them if you feel better or worse.</p>
             <div className="mt-5 flex flex-wrap justify-center gap-3">
               <button onClick={() => publish({ type: 'vitals', eid, by: account, note: 'Patient reports feeling worse' })} className="min-h-12 border-2 border-[#e45b5b]/70 px-5 text-sm text-[#ff9999]">I feel worse</button>
               <button onClick={() => publish({ type: 'vitals', eid, by: account, note: 'Patient reports feeling better' })} className="min-h-12 border border-marble/35 px-5 text-sm text-marble/80">I feel better</button>
             </div>
           </section>
-        ) : mine.length ? (
-          <section aria-labelledby="assigned-steps-heading">
-            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <div className="font-mono text-[10px] tracking-[0.17em] text-[#ff8585]">ASSIGNED TO {me?.name.toUpperCase()}</div>
-                <h2 id="assigned-steps-heading" className="mt-1 text-xl font-semibold text-marble">Your steps</h2>
+        ) : activeTask ? (
+          <section aria-labelledby="assigned-steps-heading" className="mx-auto w-full max-w-3xl">
+            <div className="mb-3 font-mono text-[10px] tracking-[0.17em] text-[#ff8585]">YOUR NEXT STEP · {me?.name.toUpperCase()}</div>
+            <div aria-live="polite" className={`min-h-64 border p-6 md:p-10 ${activeTask.status === 'blocked' ? 'border-[#e39b4b]/60 bg-[#e39b4b]/[0.06]' : 'border-[#e45b5b]/40 bg-[#101721]'}`}>
+              <h2 id="assigned-steps-heading" className="text-2xl font-semibold leading-tight text-marble md:text-4xl">
+                {activeTask.status === 'waiting'
+                  ? 'Wait for your crew.'
+                  : activeTask.status === 'blocked'
+                    ? 'Get the medical lead.'
+                    : activeTask.step.ask?.question ?? activeTask.step.text}
+              </h2>
+              {activeTask.status !== 'ready' && <p className="mt-4 text-lg text-[#f3c28d]">
+                {activeTask.status === 'waiting' ? 'Another crew step must happen first.' : `Equipment unavailable: ${activeTask.blockedBy ?? 'check with the medical lead'}.`}
+              </p>}
+              {activeTask.status === 'ready' && activeTask.step.ask && (
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <button onClick={() => complete(activeTask.step.id, 'yes')} className="min-h-14 border border-marble/35 text-lg text-marble">Yes</button>
+                  <button onClick={() => complete(activeTask.step.id, 'no')} className="min-h-14 border border-marble/35 text-lg text-marble">No</button>
+                </div>
+              )}
+              {activeTask.status === 'ready' && activeTask.step.verify === 'clinical' && (
+                isLead
+                  ? <label className="mt-5 flex items-center gap-3 text-base text-marble/80">
+                    <input type="checkbox" checked={c.verified.has(activeTask.step.id)} disabled={c.verified.has(activeTask.step.id)} onChange={() => publish({ type: 'verify', eid, by: account, stepId: activeTask.step.id })} />
+                    <ShieldCheck size={18} className="text-[#63c9a8]" /> Confirm approved instructions were followed
+                  </label>
+                  : <p className="mt-5 text-base text-marble/60">The medical lead must confirm this step.</p>
+              )}
+              {cannot === activeTask.step.id && (
+                <div className="mt-5 border border-[#e39b4b]/50 p-4">
+                  <p className="text-lg text-marble">{activeTask.step.ifCannot}</p>
+                  <button onClick={() => complete(activeTask.step.id, 'cannot')} className="mt-4 min-h-12 bg-[#e39b4b] px-5 text-sm font-semibold text-[#17100a]">RECORD AND CONTINUE</button>
+                </div>
+              )}
+              <div className="mt-7 flex flex-wrap gap-3">
+                {activeTask.status === 'ready' && !activeTask.step.ask && (
+                  <button onClick={() => { advanceStep(); }} disabled={activeTask.step.verify === 'clinical' && !c.verified.has(activeTask.step.id)}
+                    className="flex min-h-14 flex-1 items-center justify-center gap-2 bg-[#e45b5b] px-5 text-lg font-semibold text-[#16090a] hover:bg-[#ff8585] disabled:opacity-40">
+                    <Check size={20} /> NEXT STEP
+                  </button>
+                )}
+                {activeTask.status === 'ready' && (
+                  <button onClick={() => setCannot(cannot === activeTask.step.id ? undefined : activeTask.step.id)} className="min-h-14 border border-marble/25 px-5 text-base text-marble/75">I can’t do this</button>
+                )}
               </div>
-              <div className="text-xs text-marble/55">{myRoles.map((role) => roleName[role]).join(' · ')}</div>
             </div>
-            <ol className="space-y-3">
-              {mine.map((task, index) => {
-                const blocked = task.status === 'blocked';
-                const waiting = task.status === 'waiting';
-                const done = task.status === 'done';
-                const step = task.step;
-                const equipment = (step.equipment ?? []).map((id) => inventory.find((item) => item.id === id)).filter((item) => item !== undefined);
-                const verified = c.verified.has(step.id);
-                const needsVerify = step.verify === 'clinical' && !verified;
-                return (
-                  <li key={step.id} className={`border p-4 md:p-5 ${done ? 'border-[#63c9a8]/30 bg-[#63c9a8]/[0.03]' : waiting ? 'border-marble/10 bg-marble/[0.02]' : blocked ? 'border-[#e39b4b]/60 bg-[#e39b4b]/[0.04]' : 'border-marble/20 bg-[#101721]'}`}>
-                    <div className="flex items-start gap-3">
-                      <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-mono text-xs ${done ? 'border-[#63c9a8] text-[#63c9a8]' : 'border-marble/25 text-marble/70'}`}>
-                        {done ? <Check size={15} /> : index + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-[9px] tracking-[0.14em] text-marble/45">{roleName[step.role].toUpperCase()}</span>
-                          <span className={`font-mono text-[9px] tracking-[0.12em] ${done ? 'text-[#63c9a8]' : blocked ? 'text-[#f3c28d]' : waiting ? 'text-marble/45' : 'text-[#ff8585]'}`}>
-                            {done ? 'COMPLETE' : blocked ? 'BLOCKED' : waiting ? 'WAITING' : 'YOUR ACTION'}
-                          </span>
-                        </div>
-                        <p className={`mt-2 text-base leading-relaxed md:text-lg ${done ? 'text-marble/60' : 'text-marble'}`}>{step.text}</p>
-                        {waiting && task.waitingFor.length > 0 && <p className="mt-2 text-xs text-marble/50">Waiting for another assigned step to finish.</p>}
-                        {task.blockedBy && <p className="mt-2 text-sm text-[#f3c28d]">Equipment unavailable: {task.blockedBy}. Notify the medical lead.</p>}
-                        {equipment.length > 0 && !done && (
-                          <ul className="mt-3 space-y-1">
-                            {equipment.map((item) => (
-                              <li key={item.id} className="text-sm text-marble/75">
-                                <span className="font-medium text-marble">{item.name}</span> · {item.location} · {item.status}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        {step.ask && task.status === 'ready' && (
-                          <div className="mt-4">
-                            <p className="text-sm text-marble/80">{step.ask.question}</p>
-                            <div className="mt-2 grid grid-cols-2 gap-2">
-                              <button onClick={() => complete(step.id, 'yes')} className="min-h-11 border border-marble/35 text-marble hover:bg-marble/5">Yes</button>
-                              <button onClick={() => complete(step.id, 'no')} className="min-h-11 border border-marble/35 text-marble hover:bg-marble/5">No</button>
-                            </div>
-                          </div>
-                        )}
-                        {step.verify === 'clinical' && (
-                          isLead
-                            ? <label className="mt-3 flex items-center gap-2 text-sm text-marble/80">
-                              <input type="checkbox" checked={verified} disabled={verified || waiting || blocked} onChange={() => publish({ type: 'verify', eid, by: account, stepId: step.id })} />
-                              <ShieldCheck size={15} className="text-[#63c9a8]" /> Confirm the mission-authorized instruction was followed
-                            </label>
-                            : <p className="mt-3 text-xs text-marble/50">Requires confirmation from the medical lead.</p>
-                        )}
-                        {cannot === step.id && (
-                          <div className="mt-4 border border-[#e39b4b]/50 p-3">
-                            <div className="font-mono text-[9px] tracking-[0.15em] text-[#f3c28d]">IF THIS STEP CANNOT BE COMPLETED</div>
-                            <p className="mt-1 text-sm text-marble">{step.ifCannot}</p>
-                            <button onClick={() => complete(step.id, 'cannot')} className="mt-3 min-h-10 bg-[#e39b4b] px-4 text-xs font-semibold text-[#17100a]">RECORD AND CONTINUE</button>
-                          </div>
-                        )}
-                        {!done && !waiting && !step.ask && (
-                          <div className="mt-4 flex gap-2">
-                            <button onClick={() => setCannot(cannot === step.id ? undefined : step.id)} className="min-h-11 border border-marble/25 px-4 text-sm text-marble/75">Can't do this</button>
-                            <button onClick={() => complete(step.id, 'done')} disabled={needsVerify || blocked}
-                              className="flex min-h-11 flex-1 items-center justify-center gap-2 bg-[#e45b5b] px-4 text-sm font-semibold text-[#16090a] hover:bg-[#ff8585] disabled:cursor-not-allowed disabled:opacity-40">
-                              <Check size={16} /> Mark complete
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
+            <div className="mt-2 text-right text-xs text-marble/45">Say “next step” to continue when this step is done.</div>
           </section>
         ) : (
-          <section className="border border-marble/10 p-6 text-center">
+          <section className="mx-auto w-full max-w-3xl border border-[#63c9a8]/30 bg-[#63c9a8]/[0.04] p-8 text-center">
             <CircleDashed className="mx-auto text-marble/35" size={30} />
-            <h2 className="mt-3 text-lg font-semibold text-marble">Stand by</h2>
-            <p className="mt-1 text-sm text-marble/60">You have no assigned procedure steps right now. Remain available for the response lead.</p>
+            <h2 className="mt-3 text-2xl font-semibold text-marble">{mine.length ? 'Your steps are done.' : 'Stand by for your crew.'}</h2>
           </section>
         )}
 

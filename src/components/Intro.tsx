@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CentaurConstellation, GreekKey } from './Brand';
+import { CentaurConstellation } from './Brand';
 
 const NAME = 'CHIRON';
 
@@ -37,9 +37,8 @@ export function Intro({ onDone }: { onDone: () => void }) {
             <span key={i} className="rise" style={{ animationDelay: `${1.3 + i * 0.12}s` }}>{ch}</span>
           ))}
         </h1>
-        <div className="fade-in mt-5" style={{ animationDelay: '2.4s' }}><GreekKey width={260} /></div>
         <p className="rise mt-5 font-mono text-xs tracking-[0.35em] text-mute md:text-sm" style={{ animationDelay: '2.7s' }}>
-          WATCH · TEACH · ACT
+          CREW HEALTH SUPPORT
         </p>
       </div>
       <p className="fade-in absolute bottom-8 font-mono text-[10px] tracking-[0.3em] text-mute/70" style={{ animationDelay: '3.2s' }}>

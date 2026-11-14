@@ -10,8 +10,8 @@ import { CameraRig } from './three/CameraRig';
 import { Routes } from './three/Routes';
 import { INTRO_VIEW, backdropView, framing, selectView } from './three/space';
 import { Intro } from './components/Intro';
-import { GreekKey } from './components/Brand';
 import { HealthRecord } from './components/HealthRecord';
+import { HealthSupport } from './components/HealthSupport';
 import { CheckIn } from './components/CheckIn';
 import { Today } from './components/watch/Today';
 import { Teach } from './components/teach/Teach';
@@ -19,7 +19,7 @@ import { Act } from './components/act/Act';
 import { KnowledgeBase } from './components/KnowledgeBase';
 import { MissionDashboard } from './components/MissionDashboard';
 import { EmergencyAlerts } from './components/EmergencyAlerts';
-import { speak, useVoiceControl } from './components/VoiceControl';
+import { NEXT_STEP_EVENT, speak, stopSpeaking, useVoiceControl } from './components/VoiceControl';
 import type { Selection } from './components/Frieze';
 import { crew, inventoryFor, procedures as emergencyProcedures } from './emergency/data';
 import type { Procedure as EmergencyProcedure } from './emergency/types';
@@ -34,15 +34,6 @@ type Phase = 'intro' | 'select' | 'launch' | 'mission';
 type Mode = 'watch' | 'teach' | 'act';
 
 interface TodayCheckIn { values: Record<string, number>; symptoms: string[]; time: string }
-
-// Readings that should open emergency mode straight away. DEMO thresholds: replace with approved limits.
-function dangerReason(v: Record<string, number>): string | undefined {
-  if (v.hr !== undefined && (v.hr >= 130 || v.hr <= 40)) return `resting heart rate ${v.hr} bpm`;
-  if (v.temp !== undefined && v.temp >= 39.5) return `temperature ${v.temp} °C`;
-  if (v.glucose !== undefined && (v.glucose < 54 || v.glucose >= 300)) return `blood sugar ${v.glucose} mg/dL`;
-  if (v.bp_sys !== undefined && (v.bp_sys >= 180 || v.bp_sys < 85)) return `blood pressure ${v.bp_sys} mmHg`;
-  return undefined;
-}
 
 function useGmt() {
   const [now, setNow] = useState(() => new Date());
@@ -92,7 +83,7 @@ export default function App() {
   const [hovered, setHovered] = useState<MissionId>();
   const [chosen, setChosen] = useState<MissionId>();
   const [selection, setSelection] = useState<Selection>({ from: 0, to: 0 });
-  const [checkIns, setCheckIns] = useState<Partial<Record<MissionId, TodayCheckIn>>>({});
+  const [checkIns, setCheckIns] = useState<Partial<Record<MissionId, Record<string, TodayCheckIn>>>>({});
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [teachStart, setTeachStart] = useState<string>();
   const [actReason, setActReason] = useState<string>();
@@ -110,15 +101,63 @@ export default function App() {
   const gmt = useGmt();
   const aspect = useAspect();
   const voice = useVoiceControl((text) => {
-    const command = text.toLowerCase().replace(/[.!?]/g, '').trim();
-    if (/open my health profile|show my health profile/.test(command)) {
+    const command = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’]s\b/g, '').replace(/[.!?,'’]/g, '').replace(/\s+/g, ' ').trim();
+    if (/^(?:open|show) my (?:health )?profile$/.test(command)) {
       setSelectedProfile(account);
       setMode('watch');
       speak(`Opening your health profile, ${crew.find((member) => member.id === account)?.name ?? 'crew member'}.`);
-    } else if (/show crew status|crew status/.test(command)) {
+    } else if (/show crew status|crew status|mission overview|go back to overview/.test(command)) {
       setMode('watch');
       setSelectedProfile(undefined);
       speak('Crew status is displayed on the mission dashboard.');
+    } else if (/open daily check.?in|start daily check.?in/.test(command)) {
+      setSelectedProfile(account);
+      setMode('watch');
+      setCheckInOpen(true);
+      speak('Opening your daily check-in.');
+    } else if (/open watch|show watch/.test(command)) {
+      setMode('watch');
+      speak('Opening Watch.');
+    } else if (/^(?:please )?(?:go to )?next step$/.test(command)) {
+      if (mode === 'act' || mode === 'teach') {
+        window.dispatchEvent(new Event(NEXT_STEP_EVENT));
+      } else {
+        speak('Open a measurement guide or emergency response first.');
+      }
+    } else if (/open act|open emergency mode|open emergency response/.test(command)) {
+      setVoiceConfirm(true);
+      speak('Please confirm on screen to open emergency response.');
+    } else if (/(?:profile|health).*(?:open|show)|(?:open|show).*(?:profile|health)/.test(command)) {
+      const requestedName = command.replace(/^(?:please\s+)?(?:can you\s+)?(?:could you\s+)?(?:open|show)\s+/, '')
+        .replace(/^(?:the\s+)?profile\s+(?:for|of)\s+/, '')
+        .replace(/\s+(?:health\s+)?profile.*$/, '')
+        .replace(/^(?:the\s+)?/, '')
+        .replace(/\s+/g, ' ').trim();
+      const tokens = requestedName.split(' ').filter((token) => !['the', 'for', 'of', 'my', 'health'].includes(token));
+      const distance = (left: string, right: string) => {
+        const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+        for (let i = 1; i <= left.length; i += 1) {
+          let previous = row[0];
+          row[0] = i;
+          for (let j = 1; j <= right.length; j += 1) {
+            const current = row[j];
+            row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (left[i - 1] === right[j - 1] ? 0 : 1));
+            previous = current;
+          }
+        }
+        return row[right.length];
+      };
+      const member = crew.find((person) => {
+        const nameTokens = person.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/\s+/);
+        return tokens.some((token) => nameTokens.some((name) => token === name || (token.length > 3 && distance(token, name) <= 1)));
+      });
+      if (member) {
+        setSelectedProfile(member.id);
+        setMode('watch');
+        speak(`Opening ${member.name}’s health profile.`);
+      } else {
+        speak('I could not identify that crew member. Try “open my health profile”.');
+      }
     } else if (/check my readiness|readiness for the next task/.test(command)) {
       const needsAttention = (records[records.length - 1]?.drift ?? 0) >= 0.3;
       speak(needsAttention
@@ -127,21 +166,20 @@ export default function App() {
       setMode('watch');
     } else if (/explain my radiation exposure|radiation exposure/.test(command)) {
       setMode('watch');
+      setSelectedProfile(account);
       speak(`The mission estimate is ${mission?.radiationPerDay ?? 0} millisieverts per day. This is a simulated estimate, not a personal dosimeter reading.`);
-    } else if (/open emergency mode|open emergency response/.test(command)) {
-      setVoiceConfirm(true);
-      speak('Please confirm on screen to open emergency response.');
-    } else if (/show available medical equipment|available medical equipment|show available equipment/.test(command)) {
+    } else if (/show available medical equipment|available medical equipment|show available equipment|open medical equipment/.test(command)) {
       setInventoryOpen(true);
       const items = mission ? inventoryFor(mission.id).filter((item) => item.status === 'available' && item.quantity > 0) : [];
       speak(`${items.length} equipment items are marked available. The list is open on screen.`);
     } else {
-      speak('Command not recognized. Try: open my health profile, show crew status, check my readiness, explain my radiation exposure, open emergency mode, or show available medical equipment.');
+      speak('Command not recognized. Try open my health profile, show crew status, open daily check-in, open Teach, or show available medical equipment.');
     }
   });
 
   const mission = chosen ? missions[chosen] : undefined;
-  const todayCheckIn = chosen ? checkIns[chosen] : undefined;
+  const activeProfileId = selectedProfile ?? account;
+  const todayCheckIn = chosen ? checkIns[chosen]?.[activeProfileId] : undefined;
 
   // Simulated history, with today's check-in (if any) applied to the last day.
   const records = useMemo<DayRecord[]>(() => {
@@ -221,7 +259,6 @@ export default function App() {
         <div className="pointer-events-none absolute inset-x-0 top-10 flex flex-col items-center text-center">
           <div className="rise font-mono text-[10px] tracking-[0.4em] text-mute">⚷ CHIRON</div>
           <h2 className="rise mt-3 font-serif text-3xl tracking-[0.25em] text-marble md:text-4xl" style={{ animationDelay: '0.15s' }}>CHOOSE YOUR MISSION</h2>
-          <div className="fade-in mt-4" style={{ animationDelay: '0.4s' }}><GreekKey width={220} /></div>
           <p className="rise mt-4 max-w-md text-sm text-marble/60" style={{ animationDelay: '0.5s' }}>
             Each mission changes the gravity, the delay to Earth and the care available on board.
           </p>
@@ -239,13 +276,12 @@ export default function App() {
                 ? 'All clear · no immediate crew actions pending'
                 : 'Routine crew check-in pending'}
             statusNeedsAttention={casesFrom(log).some((item) => !item.ended && item.mission === mission.id)}
-            gmt={gmt} listening={voice.listening} voiceSupported={voice.supported}
-            onMode={(next) => next === 'act' ? mode !== 'act' && openAct() : setMode(next)}
+            gmt={gmt} listening={voice.listening} speaking={voice.speaking} voiceSupported={voice.supported}
             onAccount={setAccount}
             onProfile={(id) => { setSelectedProfile(id); setMode('watch'); }}
             onCloseProfile={() => setSelectedProfile(undefined)}
             onEmergency={() => openAct()}
-            onVoice={voice.toggle} onChangeMission={back} />
+            onVoice={voice.toggle} onStopSpeaking={stopSpeaking} onChangeMission={back} />
 
           {voice.message && <div role="status" className="mx-4 -mt-2 mb-2 text-right text-xs text-[#9be7ef] md:mx-8">{voice.message}</div>}
 
@@ -254,9 +290,12 @@ export default function App() {
               <div className="flex flex-1 items-start px-4 py-2 md:px-8">
                 <Today mission={mission} records={records} checkedIn={!!todayCheckIn || selectedProfile !== account}
                   name={crew.find((member) => member.id === selectedProfile)?.name.split(' ')[0]}
-                  onCheckIn={() => setCheckInOpen(true)} onTeach={openTeach} onEmergency={() => openAct()} />
+                  onCheckIn={() => selectedProfile === account && setCheckInOpen(true)} onTeach={openTeach} onEmergency={() => openAct()} />
               </div>
               <HealthRecord mission={mission} records={records} marks={marks} selection={selection} onSelect={setSelection} />
+              <HealthSupport key={selectedProfile} astronautId={selectedProfile}
+                astronautName={crew.find((member) => member.id === selectedProfile)?.name ?? 'Crew member'}
+                mission={mission} records={records} />
             </>
           )}
         </div>
@@ -302,10 +341,9 @@ export default function App() {
         <CheckIn
           latest={records[records.length - 1]}
           onClose={() => setCheckInOpen(false)}
+          onTeach={(procedureId) => { setTeachStart(procedureId); setMode('teach'); }}
           onDone={(values, symptoms) => {
-            setCheckIns((c) => ({ ...c, [mission.id]: { values, symptoms, time: gmt } }));
-            const reason = dangerReason(values);
-            if (reason) { setCheckInOpen(false); openAct(`${reason}, above a demo threshold`); }
+            setCheckIns((c) => ({ ...c, [mission.id]: { ...c[mission.id], [account]: { values, symptoms, time: gmt } } }));
           }}
         />
       )}

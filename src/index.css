@@ -70,15 +70,6 @@ body {
 .instrument-mark::before { width: 16px; height: 1px; }
 .instrument-mark::after { width: 1px; height: 16px; }
 
-.section-link-line {
-  position: absolute;
-  top: 50%;
-  right: 12%;
-  left: 12%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgb(200 169 106 / 35%), transparent);
-}
-
 .instrument-dial {
   position: relative;
   display: grid;

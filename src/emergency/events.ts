@@ -17,6 +17,7 @@ export type ChironEvent = Base & (
   | { type: 'message'; eid: string; message: EarthMessage }
   | { type: 'link'; lost: boolean }
   | { type: 'support'; to: string; from: string }
+  | { type: 'medical-access'; eid: string; patientId: string; reason: string }
   | { type: 'end'; eid: string }
 );
 

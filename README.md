@@ -2,7 +2,7 @@
 
 Health software for astronauts, built for the NASA Space Apps Challenge 2026 ("Create Health Monitoring Software for Astronauts on Space Missions").
 
-CHIRON is a health-support prototype for astronauts. WATCH presents personal health trends, TEACH explains spaceflight health research, and ACT coordinates role-specific crew actions in a simulated emergency.
+CHIRON is a health-support prototype for astronauts. The mission home focuses on crew profiles and general status. Measurement guidance appears when requested, and ACT presents one assigned emergency step at a time.
 
 **This is a demonstration, not a medical device or clinical guidance. Emergency scenarios are hypothetical training examples. They are not NASA-approved procedures.**
 
@@ -30,6 +30,12 @@ npm run dev -- --host
 Then open the address Vite prints (Network) on each device. The log is also stored on each device, so CHIRON keeps working offline and catches up when reconnected.
 
 The crew, inventory, health readings, and emergency scenarios are simulated. The emergency library demonstrates a draft/approval workflow only; it does not certify procedures for medical use.
+
+## WATCH health-support prototype
+
+Selecting a crew profile opens local-first health tools: selectable health areas over the included body image, manual symptom reports for named or clicked body locations, manual reading entry with time/source/context and unverified-quality labels, short end-of-day reflections, descriptive recent trends, low-confidence projections from simulated records, and hypothetical mission scenarios. Measurement guides open from the related check-in prompt. A simulated Earth-team profile panel demonstrates draft/review metadata; it is not a real upload or approval service. Browser local storage is used for these profile entries; records are not encrypted, synced, or sent to Mission Control by these tools. The app does not cache its assets for offline reload. If storage, the app or a sensor is unavailable, use mission-authorized paper procedures.
+
+Emergency response includes a role-gated, reason-recorded view of the demo crew medical summary. This is a prototype UI workflow, not enforceable authorization or production audit/security. No live sensors, approved medical limits, clinical protocols, individual astronaut baselines, automatic task clearance, or real medical-team upload/approval service is connected. Missing values are shown as unavailable, never as reassuring results.
 
 ## Health research
 

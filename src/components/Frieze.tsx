@@ -1,6 +1,6 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import type { DayRecord, Mark, Milestone } from '../types';
-import { markColor, markLabel } from '../lib/theme';
+import { markColor } from '../lib/theme';
 
 export type FocusItem = { kind: 'milestone'; milestone: Milestone };
 
@@ -64,13 +64,14 @@ interface Props {
   onFocus?: (f: FocusItem) => void;
 }
 
-export function Frieze({ records, totalDays, marks, selection, onSelect, milestones = [], onFocus }: Props) {
+export function Frieze({ records, totalDays, marks, selection, onSelect }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const uid = useId().replace(/:/g, '');
   const [hover, setHover] = useState<number>();
   const [hoverMark, setHoverMark] = useState<Mark>();
   const drag = useRef<number | undefined>(undefined);
   const today = records.length - 1;
+  const emergencyMarks = marks.filter((mark) => mark.title.toLowerCase().startsWith('emergency:'));
   const x = (day: number) => PAD + (day / totalDays) * (W - PAD * 2);
 
   const { line, area, stops, ys } = useMemo(() => {
@@ -136,18 +137,18 @@ export function Frieze({ records, totalDays, marks, selection, onSelect, milesto
           </filter>
         </defs>
 
-        {/* Your normal: the band between two rules */}
+        {/* Demo baseline band */}
         <rect x={PAD} y={TOP} width={W - PAD * 2} height={BOT - TOP} fill={GOLD} opacity={0.04} />
         <line x1={PAD} x2={W - PAD} y1={TOP} y2={TOP} stroke={GOLD} strokeOpacity={0.4} />
         <line x1={PAD} x2={W - PAD} y1={BOT} y2={BOT} stroke={GOLD} strokeOpacity={0.4} />
-        <text x={W - PAD} y={TOP - 6} textAnchor="end" fill={MUTE} fontSize="9" fontFamily="var(--font-mono)" letterSpacing="2">YOUR NORMAL</text>
+        <text x={W - PAD} y={TOP - 6} textAnchor="end" fill={MUTE} fontSize="9" fontFamily="var(--font-mono)" letterSpacing="2">MEDICAL BASELINE · DEMO</text>
 
         {sel && <rect x={x(sel.from)} y={TOP - 30} width={Math.max(2, x(sel.to) - x(sel.from))} height={BOT - TOP + 80} fill={GOLD} opacity={0.08} />}
 
         {/* Days still to come */}
         <line x1={x(today)} x2={W - PAD} y1={MID} y2={MID} stroke={GOLD} strokeOpacity={0.25} strokeDasharray="1 5" />
 
-        {/* Shading where the line drifts below your normal */}
+        {/* Shading where the line drifts below the demo baseline */}
         <path d={area} fill={`url(#shade-${uid})`} clipPath={`url(#below-${uid})`} />
         {/* The line, with a soft glow underneath */}
         <path d={line} fill="none" stroke={`url(#trace-${uid})`} strokeWidth={5} opacity={0.35} filter={`url(#glow-${uid})`} />
@@ -166,7 +167,7 @@ export function Frieze({ records, totalDays, marks, selection, onSelect, milesto
         )}
 
         {/* Events, placed on the line at their day */}
-        {marks.map((m) => (
+        {emergencyMarks.map((m) => (
           <g key={`${m.day}-${m.kind}`} className="cursor-pointer"
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
@@ -177,19 +178,6 @@ export function Frieze({ records, totalDays, marks, selection, onSelect, milesto
           </g>
         ))}
 
-        {/* Mission milestones with a health meaning, past and ahead */}
-        {milestones.filter((m) => m.day <= totalDays).map((m) => {
-          const my = m.day <= today ? ys[m.day] : MID;
-          return (
-            <g key={m.day} className="cursor-pointer" onPointerDown={(ev) => ev.stopPropagation()} onPointerUp={(ev) => ev.stopPropagation()}
-              onClick={() => onFocus?.({ kind: 'milestone', milestone: m })}>
-              <circle cx={x(m.day)} cy={my} r={10} fill="transparent" />
-              <path d={`M${x(m.day)} ${my - 6}L${x(m.day) + 6} ${my}L${x(m.day)} ${my + 6}L${x(m.day) - 6} ${my}Z`} fill="#04070d" stroke={MARBLE} strokeWidth={1.3} />
-              <text x={Math.min(W - PAD, x(m.day))} y={BOT + 18} textAnchor={m.day >= totalDays ? 'end' : 'middle'} fill={MARBLE} fillOpacity={0.6} fontSize="8.5" fontFamily="var(--font-mono)" letterSpacing="1.2">{m.title.toUpperCase()}</text>
-            </g>
-          );
-        })}
-
         {hover !== undefined && !hoverMark && (
           <g pointerEvents="none">
             <line x1={x(hover)} x2={x(hover)} y1={TOP - 10} y2={H - 18} stroke={MARBLE} strokeOpacity={0.2} />
@@ -198,7 +186,7 @@ export function Frieze({ records, totalDays, marks, selection, onSelect, milesto
         )}
         {hoverMark && (
           <text x={Math.min(W - 150, Math.max(150, x(hoverMark.day)))} y={12} textAnchor="middle" fill={markColor[hoverMark.kind]} fontSize="9" fontFamily="var(--font-mono)" letterSpacing="1.2" pointerEvents="none">
-            DAY {hoverMark.day} · {markLabel[hoverMark.kind].toUpperCase()}: {hoverMark.title.toUpperCase()}
+            DAY {hoverMark.day} · MEDICAL EMERGENCY: {hoverMark.title.replace(/^emergency:\s*/i, '').toUpperCase()}
           </text>
         )}
 
@@ -210,15 +198,9 @@ export function Frieze({ records, totalDays, marks, selection, onSelect, milesto
 
       {/* Key */}
       <div className="mt-1 flex flex-wrap items-center gap-x-5 gap-y-1 px-1 font-mono text-[10px] tracking-[0.12em] text-marble/60">
-        <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><rect x="0" y="1" width="22" height="8" fill={GOLD} opacity="0.12" /><line x1="0" x2="22" y1="1" y2="1" stroke={GOLD} strokeOpacity="0.6" /><line x1="0" x2="22" y1="9" y2="9" stroke={GOLD} strokeOpacity="0.6" /></svg>YOUR NORMAL RANGE</span>
-        <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><line x1="0" x2="22" y1="5" y2="5" stroke={AMBER} strokeWidth="2" /></svg>OUTSIDE YOUR NORMAL</span>
-        {(['noticed', 'action', 'earth', 'logged'] as const).map((k) => (
-          <span key={k} className="flex items-center gap-1.5">
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><MarkShape kind={k} x={6} y={6.5} scale={1} /></svg>
-            {markLabel[k].toUpperCase()}
-          </span>
-        ))}
-        <span className="flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><path d="M6 6l6 0l-6 6l-6 -6z" transform="translate(0 -3)" fill="#04070d" stroke={MARBLE} strokeWidth="1.2" /></svg>MISSION MILESTONE</span>
+        <span className="flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><MarkShape kind="noticed" x={6} y={6.5} scale={1} /></svg>MEDICAL EMERGENCIES</span>
+        <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><rect x="0" y="1" width="22" height="8" fill={GOLD} opacity="0.12" /><line x1="0" x2="22" y1="1" y2="1" stroke={GOLD} strokeOpacity="0.6" /><line x1="0" x2="22" y1="9" y2="9" stroke={GOLD} strokeOpacity="0.6" /></svg>MEDICAL BASELINE · DEMO</span>
+        <span className="flex items-center gap-1.5"><svg width="22" height="10" aria-hidden><line x1="0" x2="22" y1="5" y2="5" stroke={GOLD} strokeWidth="2" /></svg>HEALTH DATA LINE</span>
       </div>
     </div>
   );

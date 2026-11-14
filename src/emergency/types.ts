@@ -10,7 +10,27 @@ export interface CrewMember {
   position: string;
   qualifications: Qualification[];
   available: boolean;
-  medical: { allergies: string[]; conditions: string[]; notes: string };
+  medical: {
+    allergies: string[];
+    conditions: string[];
+    notes: string;
+    medications?: string[];
+    restrictions?: string[];
+    history?: string[];
+  };
+}
+
+export interface DemoMedicalProfile {
+  allergies: string[];
+  medications: string[];
+  restrictions: string[];
+  history: string[];
+  baselineNotes: string;
+  author: string;
+  version: string;
+  status: 'sample' | 'draft' | 'demo-reviewed';
+  updatedAt: string;
+  reviewedAt?: string;
 }
 
 export type ItemStatus = 'available' | 'in-use' | 'reserved' | 'depleted' | 'damaged' | 'expired' | 'unverified';

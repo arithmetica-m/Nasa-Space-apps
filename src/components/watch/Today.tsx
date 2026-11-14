@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { BookOpen, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import type { DayRecord, Mission } from '../../types';
 import { indicatorById } from '../../data/indicators';
 import { latestValue } from '../../lib/health';
@@ -20,7 +20,7 @@ function Indicator({ records, id, label }: { records: DayRecord[]; id: string; l
   const low = v !== undefined && v < lo;
   const high = v !== undefined && v > hi;
   const usual = v !== undefined && !low && !high;
-  const word = v === undefined ? 'Not logged' : usual ? 'As usual' : low ? 'Lower than usual' : 'Higher than usual';
+  const word = v === undefined ? 'Not logged' : usual ? 'Within demo baseline' : low ? 'Below demo baseline' : 'Above demo baseline';
   const color = v === undefined ? '#8b8576' : usual ? stateColor.nominal : stateColor.caution;
   return (
     <div className="flex-1 border border-marble/10 bg-void/50 px-3 py-2">
@@ -56,6 +56,7 @@ export function Today({ mission, records, checkedIn, onCheckIn, onTeach, onEmerg
   let since = today;
   while (since > 0 && records[since - 1].drift >= 0.3) since--;
   const attention = records[today].drift >= 0.3;
+  const missingDailyReadings = ['sleep_h', 'hr', 'mood'].filter((id) => records[today].values[id] === undefined).length;
   const insights = useMemo(() => buildInsights(mission, records), [mission, records]);
 
   return (
@@ -63,7 +64,11 @@ export function Today({ mission, records, checkedIn, onCheckIn, onTeach, onEmerg
       <div className="font-mono text-[10px] tracking-[0.35em] text-gold">⚷ CHIRON IS WATCHING</div>
       <h2 className="mt-2 font-serif text-2xl tracking-[0.08em] text-marble">{greeting}, {name}</h2>
       <p className="mt-1 text-sm text-marble/70">
-        {attention ? `Since day ${since}, a few readings have been different from your normal. Not an emergency.` : 'Everything is within your normal. Nothing needs your attention.'}
+        {attention
+          ? `Since day ${since}, some simulated readings differ from this demo baseline. This is not a diagnosis or emergency assessment.`
+          : missingDailyReadings
+            ? `No change flagged in available demo readings; ${missingDailyReadings} daily measures are unavailable. Missing readings are not an all-clear.`
+            : 'No change flagged in the available simulated readings. This is not a medical clearance.'}
       </p>
 
       <div className="mt-3 flex gap-2">
@@ -116,9 +121,6 @@ export function Today({ mission, records, checkedIn, onCheckIn, onTeach, onEmerg
       </ul>
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <button onClick={() => onTeach()} className="flex items-center gap-2 font-mono text-[10px] tracking-[0.25em] text-marble/70 hover:text-gold">
-          <BookOpen size={14} /> PROCEDURES
-        </button>
         <HoldButton onConfirm={onEmergency} label="HOLD FOR EMERGENCY" />
       </div>
     </div>

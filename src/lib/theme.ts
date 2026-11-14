@@ -18,7 +18,7 @@ export const stateColor: Record<State, string> = {
 
 // Plain words for each state. "Caution" sounded like danger, so it is not used on screen.
 export const stateLabel: Record<State, string> = {
-  nominal: 'Within your normal',
+  nominal: 'Within demo baseline',
   caution: 'Needs attention',
   warning: 'Emergency',
 };

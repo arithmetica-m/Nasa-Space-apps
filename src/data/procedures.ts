@@ -16,7 +16,7 @@ export const procedures: Procedure[] = [
   {
     id: 'blood-pressure',
     title: 'Measure your blood pressure',
-    purpose: 'Your blood pressure has been higher than your normal. A careful reading tells Chiron if the change is real.',
+    purpose: 'This simulated blood pressure is above the demo baseline. A repeatable reading helps the medical team assess whether a change is present.',
     source: { kind: 'demo', label: 'Hypothetical CHIRON training guide · not NASA-approved' },
     steps: [
       { text: 'Sit still and secure yourself for 5 minutes before measuring.', icon: 'seat' },
@@ -29,7 +29,7 @@ export const procedures: Procedure[] = [
   {
     id: 'resting-heart-rate',
     title: 'Take a resting heart rate',
-    purpose: 'Your resting heart rate has been above your normal. Measuring it the same way each morning makes the trend reliable.',
+    purpose: 'This simulated resting heart rate is above the demo baseline. Measuring it consistently can help a medical professional review a trend.',
     source: { kind: 'demo', label: 'Hypothetical CHIRON training guide · not NASA-approved' },
     steps: [
       { text: 'Measure first thing after waking, before exercise or coffee.', icon: 'timer' },
@@ -53,7 +53,7 @@ export const procedures: Procedure[] = [
   {
     id: 'blood-sugar',
     title: 'Measure your blood sugar',
-    purpose: 'A fasting reading before breakfast is the one Chiron compares with your normal.',
+    purpose: 'A fasting reading before breakfast is the simulated value CHIRON compares with the demo baseline.',
     source: { kind: 'demo', label: 'Hypothetical CHIRON training guide · not NASA-approved' },
     steps: [
       { text: 'Measure before breakfast. Wash and dry your hands.', icon: 'drop' },

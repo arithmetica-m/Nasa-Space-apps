@@ -6,8 +6,6 @@ import { assignRoles, checkResources, resolveProcedure, roleName, type ResourceC
 
 // Demo scale for signal travel: one real second stands for one minute.
 export const DELAY_MIN: Record<MissionId, number> = { iss: 0.05, moon: 0.05, 'mars-transit': 11, 'mars-surface': 18 };
-export const DEMO_SPO2_ESCALATE = 90; // demo value, not an approved limit
-export const DEMO_HR_ESCALATE = 130; // demo value, not an approved limit
 
 const name = (id: string) => baseCrew.find((c) => c.id === id)?.name ?? id;
 
@@ -116,15 +114,9 @@ export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[],
     alerts.push(`${ch.name} is ${ch.status}. No approved alternative is listed.`);
   }
 
-  // Flag reported changes for the crew; do not generate clinical instructions.
+  // Surface only an explicit crew report. CHIRON has no approved clinical limits.
   const last = c.vitals[c.vitals.length - 1];
-  const prev = [...c.vitals].reverse().find((v, i) => i > 0 && v.spo2 !== undefined);
-  const falling = last?.spo2 !== undefined && prev?.spo2 !== undefined && last.spo2 < prev.spo2 - 2;
-  const esc = last && ((last.spo2 !== undefined && last.spo2 < DEMO_SPO2_ESCALATE) || (last.hr !== undefined && last.hr > DEMO_HR_ESCALATE) || falling || /worse/i.test(last.note ?? ''));
-  if (esc) {
-    const why = last.spo2 !== undefined && last.spo2 < DEMO_SPO2_ESCALATE ? `blood oxygen ${last.spo2}%` : last.hr !== undefined && last.hr > DEMO_HR_ESCALATE ? `heart rate ${last.hr} bpm` : falling ? 'blood oxygen falling' : 'patient reports feeling worse';
-    alerts.unshift(`Notify the medical lead: reported change (${why}).`);
-  }
+  if (/worse/i.test(last?.note ?? '')) alerts.unshift('The crew member reports feeling worse. Notify the medical lead and follow mission-authorized instructions.');
 
   const relevant = (s: Step) => !s.when || c.outcomes[s.when.step]?.outcome === s.when.answer;
   const decided = (s: Step) => !s.when || !!c.outcomes[s.when.step];

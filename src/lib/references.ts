@@ -11,14 +11,6 @@ export interface ReferenceCard {
   uncertainty: string[];
 }
 
-// Demo emergency thresholds used to open Act from a check-in. Not approved mission limits.
-export const DEMO_THRESHOLDS: Record<string, string> = {
-  hr: 'Below 40 or from 130 bpm',
-  temp: 'From 39.5 °C',
-  glucose: 'Below 54 or from 300 mg/dL',
-  bp_sys: 'Below 85 or from 180 mmHg',
-};
-
 const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 export function referenceCard(ind: Indicator, records: DayRecord[]): ReferenceCard {
@@ -49,9 +41,9 @@ export function referenceCard(ind: Indicator, records: DayRecord[]): ReferenceCa
 
   return {
     current,
-    personal: { low: ind.baseline[0], high: ind.baseline[1], note: 'From your pre-flight measurements (simulated)' },
+    personal: { low: ind.baseline[0], high: ind.baseline[1], note: 'Shared demo baseline; not individual measurements' },
     population: { text: 'Not added. Needs a value from published research.', sourced: false },
-    mission: { text: DEMO_THRESHOLDS[ind.id] ? `${DEMO_THRESHOLDS[ind.id]} (demo value, not an approved limit)` : 'None set. Must come from the mission medical authority.', approved: false },
+    mission: { text: 'No mission-specific medical limits are configured.', approved: false },
     trend,
     uncertainty,
   };

@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, Check, FileUp, TriangleAlert } from 'lucide-react';
 import { parseProtocol, procedures, type Procedure } from '../../data/procedures';
 import { StepIllustration } from '../StepIllustration';
+import { NEXT_STEP_EVENT, speak } from '../VoiceControl';
 
 interface Props {
   startWith?: string;
@@ -35,9 +36,24 @@ export function Teach({ startWith, uploaded, onUpload, onComplete, onMedicalLibr
   };
 
   const s = current?.steps[step];
+  useEffect(() => {
+    const onNextStep = () => {
+      if (current && !done && step + 1 < current.steps.length) {
+        setStep((value) => value + 1);
+        speak('Moving to the next step.');
+      }
+      else if (current && !done && step + 1 === current.steps.length) {
+        setDone(true);
+        onComplete(current);
+        speak('Guide complete.');
+      } else speak('Choose a guide first.');
+    };
+    window.addEventListener(NEXT_STEP_EVENT, onNextStep);
+    return () => window.removeEventListener(NEXT_STEP_EVENT, onNextStep);
+  }, [current, done, onComplete, step]);
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-void/85 backdrop-blur-md" style={{ animation: 'fade-in 0.5s ease-out' }}>
+    <div className="absolute inset-0 z-40 flex flex-col bg-void/95 backdrop-blur-md" style={{ animation: 'fade-in 0.5s ease-out' }}>
       <header className="flex items-center justify-between px-6 pt-5 md:px-8">
         <div>
           <div className="font-mono text-[10px] tracking-[0.4em] text-gold">⚷ CHIRON IS TEACHING</div>

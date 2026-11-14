@@ -62,7 +62,7 @@ function trendInsight(system: SystemId, records: DayRecord[]): Insight | undefin
   return {
     id: `trend-${system}`,
     evidence: studies.length ? ['trend', 'research'] : ['trend'],
-    title: `${ind.name} ${below ? 'below' : 'above'} your normal${days > 1 ? ` for ${days} days` : ''}`,
+    title: `${ind.name} ${below ? 'below' : 'above'} the demo baseline${days > 1 ? ` for ${days} days` : ''}`,
     why: guidance[system].why,
     suggestion: guidance[system].suggest,
     procedure: procedureFor[system],
@@ -70,10 +70,10 @@ function trendInsight(system: SystemId, records: DayRecord[]): Insight | undefin
       facts: [
         { label: 'Latest reading', value: `${fmt(ind, ref.current!.value)} · day ${ref.current!.day} · ${ref.current!.source}` },
         ...(ref.trend ? [{ label: 'Last 7 days vs the 7 before', value: `${ref.trend.recent} vs ${ref.trend.before} ${ind.unit}` }] : []),
-        { label: 'Your personal baseline', value: `${ind.baseline[0]} to ${ind.baseline[1]} ${ind.unit} · ${ref.personal.note.toLowerCase()}` },
+        { label: 'Demo baseline', value: `${ind.baseline[0]} to ${ind.baseline[1]} ${ind.unit} · ${ref.personal.note.toLowerCase()}` },
         { label: 'Population reference', value: ref.population.text },
         { label: 'Mission limit', value: ref.mission.text },
-        ...(scored.length > 1 ? [{ label: `Also outside your normal (${name.toLowerCase()})`, value: scored.slice(1).map((x) => x.ind.name.toLowerCase()).join(', ') }] : []),
+        ...(scored.length > 1 ? [{ label: `Also outside the demo baseline (${name.toLowerCase()})`, value: scored.slice(1).map((x) => x.ind.name.toLowerCase()).join(', ') }] : []),
       ],
       studies,
       limitations: [

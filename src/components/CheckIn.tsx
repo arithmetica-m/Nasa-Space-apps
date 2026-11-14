@@ -28,14 +28,23 @@ interface Props {
   latest: DayRecord;
   onClose: () => void;
   onDone: (values: Record<string, number>, symptoms: string[]) => void;
+  onTeach: (procedureId: string) => void;
 }
 
-export function CheckIn({ latest, onClose, onDone }: Props) {
+const measurementGuides: Record<string, string> = {
+  hr: 'resting-heart-rate',
+  bp_sys: 'blood-pressure',
+  glucose: 'blood-sugar',
+  temp: 'temperature',
+};
+
+export function CheckIn({ latest, onClose, onDone, onTeach }: Props) {
   const [i, setI] = useState(0);
   const [values, setValues] = useState<Record<string, number>>({});
   const [draft, setDraft] = useState('');
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
+  const [symptomHelp, setSymptomHelp] = useState(false);
   const step = STEPS[i];
 
   const next = () => { setDraft(''); if (i + 1 < STEPS.length) setI(i + 1); else { setFinished(true); onDone(values, symptoms); } };
@@ -76,7 +85,7 @@ export function CheckIn({ latest, onClose, onDone }: Props) {
                   <li key={id} className="flex justify-between gap-3">
                     <span className="text-marble/70">{ind.name}</span>
                     <span className="font-mono" style={{ color: out ? stateColor.caution : stateColor.nominal }}>
-                      {id === 'mood' ? MOODS[v - 1] : `${v} ${ind.unit}`}{out ? ' · outside your normal' : ''}
+                      {id === 'mood' ? MOODS[v - 1] : `${v} ${ind.unit}`}{out ? ' · outside demo baseline' : ''}
                     </span>
                   </li>
                 );
@@ -89,15 +98,16 @@ export function CheckIn({ latest, onClose, onDone }: Props) {
           <div className="mt-6">
             <div className="font-mono text-[10px] tracking-[0.25em] text-mute">QUESTION {i + 1} OF {STEPS.length}</div>
             <h3 className="mt-2 font-serif text-xl tracking-[0.1em] text-marble">{step.question}</h3>
-            <p className="mt-1 text-xs text-marble/60">Your normal: {indicatorById(step.id).baseline[0]} to {indicatorById(step.id).baseline[1]} {indicatorById(step.id).unit}. {indicatorById(step.id).method}.</p>
+            <p className="mt-1 text-xs text-marble/60">Simulated demo baseline: {indicatorById(step.id).baseline[0]} to {indicatorById(step.id).baseline[1]} {indicatorById(step.id).unit}. Use: {step.device}. {indicatorById(step.id).method}. Device integration is unavailable; enter a device reading manually.</p>
+            {measurementGuides[step.id] && <button type="button" onClick={() => onTeach(measurementGuides[step.id])} className="mt-3 text-sm text-gold underline underline-offset-4">Show me how to take this reading</button>}
             <div className="mt-4 flex gap-2">
               <input autoFocus inputMode="decimal" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && draftValid && (set(step.id, draftNum), next())}
-                aria-label={step.question} placeholder="Type or sync"
+              aria-label={step.question} placeholder="Enter reading"
                 className="h-11 flex-1 border border-marble/20 bg-transparent px-3 font-mono text-lg text-marble outline-none focus:border-gold/70" />
               <span className="flex items-center font-mono text-sm text-mute">{indicatorById(step.id).unit}</span>
             </div>
             <button onClick={() => sync(step.id)} className="mt-2 flex items-center gap-2 font-mono text-[10px] tracking-[0.2em] text-gold hover:text-marble">
-              <RefreshCw size={12} /> SYNC FROM {step.device.toUpperCase()}
+              <RefreshCw size={12} /> USE SIMULATED DEMO VALUE
             </button>
             <div className="mt-6 flex gap-2">
               <button onClick={next} className="flex-1 border border-marble/20 py-2.5 font-mono text-xs tracking-[0.3em] text-marble/70 hover:border-marble/40">SKIP</button>
@@ -128,6 +138,10 @@ export function CheckIn({ latest, onClose, onDone }: Props) {
                 );
               })}
             </div>
+            <button type="button" onClick={() => setSymptomHelp((visible) => !visible)} aria-expanded={symptomHelp} className="mt-4 text-sm text-gold underline underline-offset-4">
+              {symptomHelp ? 'Hide symptom help' : 'What might these symptoms mean?'}
+            </button>
+            {symptomHelp && <p className="mt-2 text-sm text-marble/70">A symptom can have many causes. Tell the medical crew what you feel; this tool cannot tell you the cause.</p>}
             <button onClick={next} className="mt-6 w-full bg-gold py-2.5 font-mono text-xs tracking-[0.3em] text-void hover:bg-marble">{symptoms.length ? 'FINISH' : 'NO SYMPTOMS, FINISH'}</button>
           </div>
         )}

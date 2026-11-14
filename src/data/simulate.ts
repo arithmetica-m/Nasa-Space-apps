@@ -105,16 +105,16 @@ export function buildMarks(records: DayRecord[]): Mark[] {
   if (starts[0] !== undefined) {
     const d = starts[0];
     marks.push(
-      { day: d, kind: 'noticed', title: 'Sleep and mood below your normal', detail: 'Sleep was shorter and more broken for over a week, and mood scores dropped. Chiron moved from Watch to Teach.' },
+      { day: d, kind: 'noticed', title: 'Sleep and mood below demo baseline', detail: 'In this simulated series, sleep was shorter and more broken for over a week, and mood scores dropped.' },
       { day: d + 7, kind: 'action', title: 'Course correction: sleep plan', detail: 'Bright light before 09:00, no screens an hour before sleep, check airflow near the sleep station.' },
       { day: d + 16, kind: 'earth', title: 'Flight surgeon reviewed the report', detail: 'The flight surgeon on Earth agreed with the sleep plan and asked for a check-in in 7 days.' },
     );
   }
   if (ends[0] !== undefined) {
-    marks.push({ day: ends[0], kind: 'logged', title: 'Back within your normal range', detail: 'Sleep and mood returned to your launch-day range. Chiron moved back to Watch.' });
+    marks.push({ day: ends[0], kind: 'logged', title: 'Back within demo baseline range', detail: 'In this simulated series, sleep and mood returned to the generated launch-day range.' });
   }
   if (starts[1] !== undefined) {
-    marks.push({ day: starts[1], kind: 'noticed', title: 'Drifting again: sleep, mood, heart rate', detail: 'Sleep is shorter, resting heart rate is higher and reaction time is slower than your normal. Chiron moved from Watch to Teach.' });
+    marks.push({ day: starts[1], kind: 'noticed', title: 'Drifting again: sleep, mood, heart rate', detail: 'In this simulated series, sleep is shorter, resting heart rate is higher and reaction time is slower than the generated demo baseline.' });
   }
   const gap = records.find((r) => !r.logged);
   if (gap) marks.push({ day: gap.day, kind: 'noticed', title: 'No daily log for 4 days', detail: 'Chiron could not see you here. Missing logs are shown as a dashed line; they do not count as worse health.' });

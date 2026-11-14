@@ -22,7 +22,7 @@ export interface Indicator {
   name: string;
   system: SystemId;
   unit: string;
-  // The astronaut's personal normal range, set from pre-flight measurements.
+  // Simulated demo range; real personal baselines must be provided by medical staff.
   baseline: [number, number];
   // How it is measured on board, in plain words.
   method: string;
@@ -67,6 +67,6 @@ export interface DayRecord {
   day: number;
   logged: boolean;
   values: Record<string, number | undefined>;
-  // 0 = within personal baseline, 1 = far outside it.
+  // 0 = within demo baseline, 1 = far outside it.
   drift: number;
 }

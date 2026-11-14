@@ -5,7 +5,6 @@ import { indicators, indicatorById } from '../data/indicators';
 import { outsideness, stateFor } from '../data/simulate';
 import { markColor, markLabel, stateColor, stateLabel } from '../lib/theme';
 import { Frieze, type FocusItem, type Selection } from './Frieze';
-import { GreekKey } from './Brand';
 
 function FocusCard({ item, mission }: { item: FocusItem; mission: Mission }) {
   const m = item.milestone;
@@ -53,7 +52,7 @@ function KeyCard({ id, label, value }: { id: string; label: string; value?: numb
         <span className="font-serif text-xl text-marble">{show(id, value)}</span>
       </div>
       <div className="mt-0.5 text-[11px]" style={{ color: value === undefined ? '#8b8576' : out ? stateColor.caution : stateColor.nominal }}>
-        {value === undefined ? '—' : out ? 'Outside your normal' : 'Within your normal'}
+        {value === undefined ? '—' : out ? 'Outside demo baseline' : 'Within demo baseline'}
       </div>
     </div>
   );
@@ -99,7 +98,6 @@ export function HealthRecord({ mission, records, marks, selection, onSelect }: P
 
   return (
     <section className="border-t border-gold/25 bg-void/80 backdrop-blur-md">
-      <div className="-mt-px"><GreekKey width={180} className="opacity-70" /></div>
       <div className="px-5 pb-4 pt-2 md:px-8">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <h2 className="font-serif text-lg tracking-[0.25em] text-marble">YOUR HEALTH SINCE LAUNCH</h2>
@@ -168,7 +166,7 @@ export function HealthRecord({ mission, records, marks, selection, onSelect }: P
                 {outside.length > 0 && (
                   <p className="mt-2 text-xs text-marble/70">
                     <span className="font-mono text-[10px] tracking-[0.2em] text-gold">CHIRON: </span>
-                    Outside your normal: {outside.map((i) => `${i.name.toLowerCase()} ${show(i.id, rec.values[i.id])}`).join(', ')}.
+                    Outside demo baseline: {outside.map((i) => `${i.name.toLowerCase()} ${show(i.id, rec.values[i.id])}`).join(', ')}.
                   </p>
                 )}
               </>
@@ -179,7 +177,7 @@ export function HealthRecord({ mission, records, marks, selection, onSelect }: P
                 </div>
                 <p className="mt-2 text-xs text-marble/70">
                   <span className="font-mono text-[10px] tracking-[0.2em] text-gold">CHIRON: </span>
-                  {daysOutside === 0 ? 'Every day in this range was within your normal.' : `${daysOutside} of ${rangeRecs.length} days were outside your normal.`}
+                  {daysOutside === 0 ? 'Every day in this range was within the demo baseline.' : `${daysOutside} of ${rangeRecs.length} days were outside the demo baseline.`}
                 </p>
               </>
             )}
