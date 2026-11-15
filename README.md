@@ -27,6 +27,7 @@ On the way to Mars, a message to Earth takes up to 22 minutes each way. There is
 13. [Scientific reliability rules](#scientific-reliability-rules)
 14. [How it is built](#how-it-is-built)
 15. [Limitations and next steps](#limitations-and-next-steps)
+16. [License](#license)
 
 ---
 
@@ -321,3 +322,9 @@ CHIRON follows these everywhere:
 **Limitations (honest):** all health, wearable and stock data is simulated; the protocols are demo protocols, not approved by NASA or a flight surgeon; warning limits are prototype rules; PINs are not real security; voice depends on the browser; a crew member added from a file exists only on the device where they were added.
 
 **Next steps:** connect real wearables; load a mission's approved protocols and formulary through the Mission Control console; validate the readiness simulation with NASA's Integrated Medical Model; build CHIRON VISION for hands-busy guidance; real authentication and encrypted records.
+
+---
+
+## License
+
+[MIT](LICENSE). The code is free to use, change and share with the copyright notice kept. The simulated data and demo protocols are for demonstration only and are not medical advice.
