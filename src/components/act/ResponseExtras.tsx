@@ -115,7 +115,7 @@ export function CrewRoles({ eid, account, plan, c, links, log }: { eid: string; 
               </label>
             </div>
             <p className={`text-sm ${l?.connected ? 'text-[#7bd5b8]' : 'text-[#f3c28d]'}`}>
-              {l?.connected ? 'Task sent to their LINK band (● ●) · receipt confirmed' : 'LINK offline: task not delivered, tell them in person'}
+              {l?.connected ? 'Task sent to their LINK band · receipt confirmed' : 'LINK offline: task not delivered, tell them in person'}
             </p>
             {c.assignments[role] && <p className="text-xs text-marble/50">Changed by {nameOf(c.assignments[role]!.by)} at {hm(c.assignments[role]!.t)}</p>}
             <Reasoning title="WHY THIS PERSON?" steps={[{ label: 'WHAT CHIRON CONSIDERED', lines: roleReasons(role, person, plan, c, links) }]} />

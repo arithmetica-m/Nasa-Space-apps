@@ -4,6 +4,7 @@ import { listenOnce } from './VoiceControl';
 import { parseSpokenNumber } from '../lib/voiceCommands';
 import type { DayRecord } from '../types';
 import { indicatorById } from '../data/indicators';
+import { measurementError, numericRange } from '../lib/measurementValidation';
 import { outsideness } from '../data/simulate';
 import { stateColor } from '../lib/theme';
 import { explain, symptomMeaning } from '../data/meanings';
@@ -95,7 +96,9 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
   };
 
   const draftNum = Number(draft);
-  const draftValid = draft.trim() !== '' && !Number.isNaN(draftNum);
+  const draftValid = draft.trim() !== '' && !Number.isNaN(draftNum) && !measurementError(step.kind === 'number' ? step.id : '', draft);
+  const draftError = step.kind === 'number' && draft.trim() !== '' ? measurementError(step.id, draft) : undefined;
+  const bounds = step.kind === 'number' ? numericRange(step.id) : undefined;
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-void/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Daily check-in">
@@ -163,11 +166,12 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
             )}
             {measurementGuides[step.id] && <button type="button" onClick={() => onTeach(measurementGuides[step.id])} className="mt-3 text-sm text-gold underline underline-offset-4">Show me how to take this reading</button>}
             <div className="mt-4 flex gap-2">
-              <input autoFocus inputMode="decimal" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && draftValid && (set(step.id, draftNum), next())}
+              <input autoFocus inputMode="decimal" value={draft} min={bounds?.min} max={bounds?.max} step={bounds?.integer ? 1 : 'any'} aria-invalid={!!draftError} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && draftValid && (set(step.id, draftNum), next())}
               aria-label={step.question} placeholder="Enter reading"
                 className="h-11 flex-1 border border-marble/20 bg-transparent px-3 font-mono text-lg text-marble outline-none focus:border-gold/70" />
               <span className="flex items-center font-mono text-sm text-mute">{indicatorById(step.id).unit}</span>
             </div>
+            {draftError && <p role="alert" className="mt-2 text-sm text-[#ff9c9c]">{draftError}</p>}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => sync(step.id)} disabled={!!syncing}
                 className="flex min-h-11 items-center justify-center gap-2 border border-marble/20 text-sm text-marble/80 hover:border-gold/60 hover:text-gold disabled:opacity-50">

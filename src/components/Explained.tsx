@@ -6,7 +6,9 @@ import type { LibraryEntry } from '../library/entries';
 import { Reasoning, type ReasonStep } from './Reasoning';
 
 export const OPEN_LIBRARY_EVENT = 'chiron-open-library';
-export const openLibrary = (entryId?: string) => window.dispatchEvent(new CustomEvent(OPEN_LIBRARY_EVENT, { detail: entryId }));
+export type LibraryOpenTarget = { entryId?: string; protocolId?: string };
+export const openLibrary = (entryId?: string) => window.dispatchEvent(new CustomEvent(OPEN_LIBRARY_EVENT, { detail: { entryId } satisfies LibraryOpenTarget }));
+export const openProtocol = (protocolId: string) => window.dispatchEvent(new CustomEvent(OPEN_LIBRARY_EVENT, { detail: { protocolId } satisfies LibraryOpenTarget }));
 
 // The same layout everywhere a reading or symptom is explained: short sections that each
 // open on tap, in large text. The advice comes from the mission medical library, fitted to

@@ -88,7 +88,7 @@ export function LinkPage({ mission, crew, links, kb, now, onProfile, account, on
                     <div className={`text-base font-bold ${m.tone === 'red' ? 'text-[#ff8585]' : m.tone === 'gold' ? 'text-gold' : 'text-marble/80'}`}>{m.head}</div>
                     {m.lines.map((x) => <div key={x} className="text-base text-marble">{x}</div>)}
                     <button type="button" onClick={() => onJoin(m.eid)} className="mt-2 min-h-12 w-full border border-marble/30 text-base font-semibold text-marble hover:border-gold">{m.tone === 'gold' ? 'VIEW INSTRUCTIONS' : 'OPEN THE EMERGENCY SCREEN'}</button>
-                    <div className={`mt-1 text-sm ${l.connected ? 'text-[#7bd5b8]' : 'text-[#f3c28d]'}`}>{l.connected ? 'Delivered to the band · vibrated ● ● ● ● ●' : 'NOT DELIVERED: band offline. Tell them in person.'}</div>
+                    <div className={`mt-1 text-sm ${l.connected ? 'text-[#7bd5b8]' : 'text-[#f3c28d]'}`}>{l.connected ? 'Delivered to the band · alert received' : 'NOT DELIVERED: band offline. Tell them in person.'}</div>
                   </div>
                 ))}
               </div>

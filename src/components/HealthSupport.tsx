@@ -4,6 +4,7 @@ import type { DayRecord } from '../types';
 import { crew } from '../emergency/data';
 import type { DemoMedicalProfile } from '../emergency/types';
 import { indicatorById } from '../data/indicators';
+import { measurementError, numericRange } from '../lib/measurementValidation';
 import { explain, symptomMeaning, type Explanation } from '../data/meanings';
 import { latestValue } from '../lib/health';
 import { Explained } from './Explained';
@@ -290,17 +291,18 @@ export function HealthSupport({ astronautId, astronautName, records, symptoms, i
                                 <span className="block text-base text-marble">{ind.name}</span>
                                 <span className="block text-sm text-marble/50">Normal {ind.baseline[0]}–{ind.baseline[1]} {ind.unit}{last ? ` · last ${last.value}` : ''}</span>
                                 <span className="mt-1 flex items-center gap-2">
-                                  <input type="number" inputMode="decimal" step="any" value={entry[id] ?? ''} onChange={(e) => setEntry((x) => ({ ...x, [id]: e.target.value }))}
+                                  <input type="number" inputMode="decimal" min={numericRange(id)?.min} max={numericRange(id)?.max} step={numericRange(id)?.integer ? 1 : 'any'} aria-invalid={!!entry[id] && !!measurementError(id, entry[id])} value={entry[id] ?? ''} onChange={(e) => setEntry((x) => ({ ...x, [id]: e.target.value }))}
                                     className="min-h-12 w-full min-w-0 border border-marble/25 bg-transparent px-3 text-lg text-marble" />
                                   <span className="shrink-0 text-sm text-marble/60">{ind.unit}</span>
                                 </span>
+                                {entry[id] && measurementError(id, entry[id]) && <span role="alert" className="mt-1 block text-sm text-[#ff9c9c]">{measurementError(id, entry[id])}</span>}
                               </label>
                             );
                           })}
                         </div>
-                        <button type="button" disabled={!Object.values(entry).some((v) => v.trim() !== '' && Number.isFinite(Number(v)))}
+                        <button type="button" disabled={!Object.values(entry).some((v) => v.trim() !== '' && Number.isFinite(Number(v))) || Object.entries(entry).some(([id, value]) => !!value.trim() && !!measurementError(id, value))}
                           onClick={() => {
-                            const values = Object.fromEntries(Object.entries(entry).filter(([, v]) => v.trim() !== '' && Number.isFinite(Number(v))).map(([k, v]) => [k, Number(v)]));
+                            const values = Object.fromEntries(Object.entries(entry).filter(([id, v]) => v.trim() !== '' && Number.isFinite(Number(v)) && !measurementError(id, v)).map(([k, v]) => [k, Number(v)]));
                             onReading(values);
                             setEntry({});
                             setSaved(Object.keys(values).map((k) => indicatorById(k).name).join(', '));

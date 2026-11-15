@@ -62,6 +62,7 @@ export interface Step {
   verify?: 'confirm' | 'clinical';
   // A question to answer. `bad` is the answer that means the situation is worse.
   ask?: { question: string; bad?: 'yes' | 'no' };
+  findings?: Partial<Record<'done' | 'cannot' | 'yes' | 'no', string>>;
   // Only part of the plan once an earlier step got this outcome. This is how new tasks appear:
   // a follow-up after treatment, or a backup for someone else when a step could not be done.
   when?: { step: string; answer: 'done' | 'yes' | 'no' | 'cannot' } | { step: string; answer: 'done' | 'yes' | 'no' | 'cannot' }[];

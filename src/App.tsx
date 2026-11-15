@@ -17,7 +17,7 @@ import { CheckIn } from './components/CheckIn';
 import { Teach } from './components/teach/Teach';
 import { Act } from './components/act/Act';
 import { Library } from './components/library/Library';
-import { OPEN_LIBRARY_EVENT } from './components/Explained';
+import { OPEN_LIBRARY_EVENT, type LibraryOpenTarget } from './components/Explained';
 import { CoreHeader, HomePage, type Page, type SystemStatus } from './components/MissionDashboard';
 import { ProfilePage } from './components/pages/ProfilePage';
 import { TrainPage } from './components/pages/TrainPage';
@@ -121,8 +121,14 @@ export default function App() {
   const [joinEid, setJoinEid] = useState<string>();
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryEntry, setLibraryEntry] = useState<string>();
+  const [libraryProtocol, setLibraryProtocol] = useState<string>();
   useEffect(() => {
-    const on = (e: Event) => { setLibraryEntry((e as CustomEvent<string | undefined>).detail); setLibraryOpen(true); };
+    const on = (e: Event) => {
+      const target = (e as CustomEvent<string | LibraryOpenTarget | undefined>).detail;
+      setLibraryEntry(typeof target === 'string' ? target : target?.entryId);
+      setLibraryProtocol(typeof target === 'object' ? target?.protocolId : undefined);
+      setLibraryOpen(true);
+    };
     window.addEventListener(OPEN_LIBRARY_EVENT, on);
     return () => window.removeEventListener(OPEN_LIBRARY_EVENT, on);
   }, []);
@@ -422,9 +428,9 @@ export default function App() {
       )}
 
       {libraryOpen && mission && (
-        <Library mission={mission.id} kb={kb} startWith={libraryEntry}
-          onGuide={(id) => { setLibraryOpen(false); setLibraryEntry(undefined); setTeachStart(id); setMode('teach'); }}
-          onClose={() => { setLibraryOpen(false); setLibraryEntry(undefined); }} />
+        <Library mission={mission.id} kb={kb} startWith={libraryEntry} startProtocol={libraryProtocol}
+          onGuide={(id) => { setLibraryOpen(false); setLibraryEntry(undefined); setLibraryProtocol(undefined); setTeachStart(id); setMode('teach'); }}
+          onClose={() => { setLibraryOpen(false); setLibraryEntry(undefined); setLibraryProtocol(undefined); }} />
       )}
 
       {checkInOpen && mission && checkInFor && recordsByCrew[checkInFor] && (

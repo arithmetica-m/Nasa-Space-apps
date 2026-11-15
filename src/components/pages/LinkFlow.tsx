@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, Send } from 'lucide-react';
 import { publish, useLog } from '../../emergency/sync';
 import { WARNING_RULES, ago, type LinkStatus } from '../../link/link';
+import { measurementError, numericRange } from '../../lib/measurementValidation';
 
 const KEYS = [
   { key: 'spo2', label: 'Blood oxygen', unit: '%' },
@@ -29,6 +30,8 @@ export function LinkFlow({ link, name, now, onProfile }: { link: LinkStatus; nam
   const unit = unitRaw === '%' ? '%' : ` ${unitRaw}`;
   const label = KEYS.find((k) => k.key === sent?.key)?.label ?? '';
   const rule = sent && WARNING_RULES.find((w) => w.key === sent.key);
+  const valueError = value.trim() ? measurementError(key, value) : undefined;
+  const bounds = numericRange(key);
   const broke = !!(sent && rule?.test(sent.value));
   const time = sent ? new Date(sent.t).toISOString().slice(11, 19) : '';
 
@@ -52,12 +55,13 @@ export function LinkFlow({ link, name, now, onProfile }: { link: LinkStatus; nam
         <select value={key} onChange={(e) => setKey(e.target.value as typeof key)} aria-label="Reading" className="min-h-11 border border-marble/25 bg-void px-2 text-base text-marble">
           {KEYS.map((k) => <option key={k.key} value={k.key}>{k.label} ({k.unit})</option>)}
         </select>
-        <input type="number" step="any" value={value} onChange={(e) => setValue(e.target.value)} aria-label="Value" placeholder="Value"
+        <input type="number" min={bounds?.min} max={bounds?.max} step={bounds?.integer ? 1 : 'any'} aria-invalid={!!valueError} value={value} onChange={(e) => setValue(e.target.value)} aria-label="Value" placeholder="Value"
           className="min-h-11 w-28 border border-marble/25 bg-transparent px-3 text-base text-marble" />
-        <button type="button" disabled={!Number.isFinite(parseFloat(value))} onClick={() => { send(key, parseFloat(value)); setValue(''); }}
+        <button type="button" disabled={!Number.isFinite(parseFloat(value)) || !!valueError} onClick={() => { send(key, parseFloat(value)); setValue(''); }}
           className="flex min-h-11 items-center gap-2 bg-gold px-4 font-mono text-xs tracking-[0.2em] text-void disabled:opacity-40"><Send size={14} /> SEND</button>
         {sent && <button type="button" onClick={() => publish({ type: 'link-clear', by: link.crewId, crewId: link.crewId })} className="min-h-11 px-3 text-sm text-marble/60 underline-offset-2 hover:underline">Reset band</button>}
       </div>
+      {valueError && <p role="alert" className="mt-2 text-sm text-[#ff9c9c]">{valueError}</p>}
 
       {sent && (
         <ol className="mt-3 grid gap-2 md:grid-cols-5">

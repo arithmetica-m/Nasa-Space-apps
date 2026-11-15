@@ -16,6 +16,8 @@ import { newId } from '../../emergency/events';
 import { crew } from '../../emergency/data';
 import { speak } from '../VoiceControl';
 import { EMERGENCY_VOICE_EVENT, type EmergencyVoice } from '../../lib/voiceCommands';
+import { measurementError, numericRange } from '../../lib/measurementValidation';
+import { openProtocol } from '../Explained';
 
 type Tab = 'record' | 'earth' | 'plan';
 
@@ -71,6 +73,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const [ending, setEnding] = useState(false);
   const [view, setView] = useState<'main' | 'crew'>('main');
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [measurementErrors, setMeasurementErrors] = useState<Record<string, string>>({});
   const [note, setNote] = useState('');
   const [showAll, setShowAll] = useState(false);
   // Voice commands reach the newest version of the handler through this ref.
@@ -175,13 +178,19 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const lines = crewLines(c, plan, log, links);
   const updates = liveUpdates(c, plan, log, now);
   const minutes = Math.max(0, Math.round((now - c.startedAt) / 60_000));
-  const doneSteps = plan.tasks.filter((t) => t.status === 'done' || t.status === 'cannot').length;
   const textOf = (t: { step: { text: string; ask?: { question: string } } }) => t.step.ask?.question ?? t.step.text;
 
   const patientMed = medicalOf(c.patientId);
   const recordText = [...patientMed.allergies, ...patientMed.history, ...patientMed.medications, ...patientMed.restrictions].join(' ').toLowerCase();
-  const lastChange = Math.max(c.startedAt, ...Object.values(c.outcomes).map((o) => o.t), ...c.measures.map((m) => m.t), ...c.vitals.map((v) => (v as { t?: number }).t ?? 0));
   const happening = situation(c, plan, states, log, links[c.patientId]);
+  const saveMeasurement = (key: string) => {
+    const value = (draft[key] ?? '').trim();
+    const error = measurementError(key, value);
+    setMeasurementErrors((current) => ({ ...current, [key]: error ?? '' }));
+    if (error) return;
+    publish({ type: 'measure', eid: c.eid, by: account, key, value, source: 'manual' });
+    setDraft((current) => ({ ...current, [key]: '' }));
+  };
 
   // Voice: done / yes / no / can't / repeat / confirm act on this device's own step.
   voiceRef.current = (action) => {
@@ -322,7 +331,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
 
           {plan.procedure && (
             <p className="text-base text-marble/55">
-              Demo library: {plan.procedure.title} v{plan.procedure.version}. Follow-up tasks appear from recorded answers. Published sources: {[...new Map(plan.procedure.steps.filter((x) => x.source).map((x) => [x.source!.url, x.source!])).values()].map((src, i) => <span key={src.url}>{i > 0 && ', '}<a href={src.url} target="_blank" rel="noreferrer" className="text-gold underline underline-offset-2">{src.label}</a></span>)}. Demonstration only—not a flight-approved medical protocol.
+              Demo library: {plan.procedure.title} v{plan.procedure.version}. Follow-up tasks appear from recorded answers. Published source material is in the onboard protocol: {[...new Map(plan.procedure.steps.filter((x) => x.source).map((x) => [x.source!.url, x.source!])).values()].map((src, i) => <span key={src.url}>{i > 0 && ', '}<button type="button" onClick={() => openProtocol(plan.procedure!.id)} className="text-gold underline underline-offset-2">{src.label}</button></span>)}. Demonstration only—not a flight-approved medical protocol. No mission medication formulary is loaded; CHIRON does not calculate doses.
             </p>
           )}
           <details className="border border-marble/15">
@@ -351,7 +360,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-lg text-marble/60">Crew steps done: {doneSteps} of {plan.tasks.length} · last change {new Date(lastChange).toISOString().slice(11, 19)} GMT · updates by itself on every device</p>
+          <p className="mt-2 text-lg text-marble/60">Confirmed findings and recorded readings update live on every device.</p>
         </section>
 
         <section aria-label="Live health measurements">
@@ -370,13 +379,15 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
                 {s.value === undefined && <div className="text-2xl font-bold text-[#f3c28d]">NOT RECORDED</div>}
                 {s.m.source === 'manual' && (
                   <div className="mt-1 flex gap-1">
-                    <input value={draft[s.m.key] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, [s.m.key]: e.target.value }))} aria-label={s.m.label} placeholder={s.m.unit ?? 'value'}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && (draft[s.m.key] ?? '').trim()) { publish({ type: 'measure', eid, by: account, key: s.m.key, value: draft[s.m.key].trim(), source: 'manual' }); setDraft((d) => ({ ...d, [s.m.key]: '' })); } }}
+                    <input type={s.m.key === 'bp' ? 'text' : 'number'} inputMode={s.m.key === 'bp' ? 'text' : 'decimal'} min={numericRange(s.m.key)?.min} max={numericRange(s.m.key)?.max} step={numericRange(s.m.key)?.integer ? 1 : 'any'}
+                      value={draft[s.m.key] ?? ''} onChange={(e) => { const value = e.target.value; setDraft((d) => ({ ...d, [s.m.key]: value })); setMeasurementErrors((current) => ({ ...current, [s.m.key]: value.trim() ? measurementError(s.m.key, value) ?? '' : '' })); }} aria-label={s.m.label} aria-invalid={!!measurementErrors[s.m.key]} aria-describedby={measurementErrors[s.m.key] ? `${s.m.key}-error` : undefined} placeholder={s.m.key === 'bp' ? '120/80' : s.m.unit ?? 'value'}
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveMeasurement(s.m.key); }}
                       className="min-h-12 w-full min-w-0 border-2 border-marble/30 bg-transparent px-2 text-xl text-marble" />
-                    <button type="button" disabled={!(draft[s.m.key] ?? '').trim()} onClick={() => { publish({ type: 'measure', eid, by: account, key: s.m.key, value: draft[s.m.key].trim(), source: 'manual' }); setDraft((d) => ({ ...d, [s.m.key]: '' })); }}
+                    <button type="button" disabled={!(draft[s.m.key] ?? '').trim()} onClick={() => saveMeasurement(s.m.key)}
                       className="min-h-12 shrink-0 bg-gold px-3 text-lg font-semibold text-void disabled:opacity-40">{s.value === undefined ? 'SAVE' : 'UPDATE'}</button>
                   </div>
                 )}
+                {measurementErrors[s.m.key] && <p id={`${s.m.key}-error`} role="alert" className="mt-1 text-sm text-[#ff9c9c]">{measurementErrors[s.m.key]}</p>}
               </li>
             ))}
             {states.length === 0 && <li className="text-xl text-marble/60">No measurements listed for this emergency.</li>}
@@ -388,7 +399,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
           <h2 className="text-xl font-bold tracking-wide text-marble/70">LIVE UPDATES</h2>
           {(
             <div className="mt-2 flex flex-wrap gap-2">
-              {['Awake and talking', 'Breathing easier', 'Breathing harder', 'Not responding'].map((o) => (
+              {['Awake and talking', 'Not responding', 'Breathing difficulty observed', 'No breathing difficulty observed', 'Visible swelling observed', 'No visible swelling observed', 'Rash observed', 'No rash observed', 'Faintness or collapse observed', 'No faintness or collapse observed', 'Breathing easier', 'Breathing harder'].map((o) => (
                 <button key={o} type="button" onClick={() => publish({ type: 'vitals', eid, by: account, note: o })} className="min-h-12 border-2 border-marble/25 px-3 text-lg text-marble hover:border-gold">{o}</button>
               ))}
               <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Other observation…" aria-label="Other observation"

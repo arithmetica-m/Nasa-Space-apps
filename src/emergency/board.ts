@@ -4,6 +4,7 @@ import { crewNow, roleName, rolesOf, type EmergencyCase, type Plan, type Task } 
 import { crew as baseCrew } from './data';
 import { WARNING_RULES, type LinkStatus } from '../link/link';
 import { categoryText } from './report';
+import { measurementError } from '../lib/measurementValidation';
 
 // THE EMERGENCY BOARD: who is assigned, who is available, and what happened, for the live
 // emergency screen and for each person's CHIRON LINK band. Both read the same shared log,
@@ -71,34 +72,51 @@ export function liveUpdates(c: EmergencyCase, plan: Plan, log: ChironEvent[], no
   return out.sort((a, b) => b.t - a.t);
 }
 
-// WHAT IS HAPPENING TO THE PATIENT: one picture built from the answers, measurements and
-// observations recorded so far. It grows as the crew completes steps. It states what was
-// observed; it does not diagnose.
+// Patient summary: only recorded findings, readings, and treatment responses appear here.
 export interface SituationLine { text: string; tone: 'red' | 'amber' | 'plain'; t?: number }
 export function situation(c: EmergencyCase, plan: Plan, states: { m: { key: string; label: string }; value?: string; t?: number; live?: boolean; source?: string }[], log: ChironEvent[], patientLink?: LinkStatus): SituationLine[] {
-  const out: SituationLine[] = [{ text: `${categoryText[c.category]}${c.reason && !/voice/i.test(c.reason) ? `. ${c.reason}` : ''}`, tone: 'red', t: c.startedAt }];
-  // What the crew found out by asking and checking.
-  for (const t of plan.tasks) {
-    const o = c.outcomes[t.step.id];
-    if (!o) continue;
-    if (t.step.ask && (o.outcome === 'yes' || o.outcome === 'no')) out.push({ text: `${t.step.ask.question} ${o.outcome.toUpperCase()}`, tone: t.step.ask.bad === o.outcome ? 'red' : 'plain', t: o.t });
-    else if (o.outcome === 'done' && t.step.record) out.push({ text: `✓ ${t.step.record}`, tone: 'plain', t: o.t });
-    else if (o.outcome === 'cannot') out.push({ text: `Could not be done: ${t.step.record ?? t.step.text}`, tone: 'amber', t: o.t });
+  const out: SituationLine[] = [{ text: `Reported event: ${categoryText[c.category]}`, tone: 'amber', t: c.startedAt }];
+  if (c.reason && !/voice/i.test(c.reason)) out.push({ text: `Crew-reported symptoms: ${c.reason}`, tone: 'plain', t: c.startedAt });
+
+  const steps = new Map((plan.procedure?.steps ?? []).map((step) => [step.id, step]));
+  for (const [stepId, outcome] of Object.entries(c.outcomes)) {
+    const text = steps.get(stepId)?.findings?.[outcome.outcome];
+    if (text) out.push({ text, tone: /no improvement|could not|not improving/i.test(text) ? 'red' : 'plain', t: outcome.t });
   }
-  // Readings, flagged when they break a prototype warning rule.
+
+  const observationGroups: { key: string; labels: string[] }[] = [
+    { key: 'breathing-sign', labels: ['Breathing difficulty observed', 'No breathing difficulty observed'] },
+    { key: 'swelling', labels: ['Visible swelling observed', 'No visible swelling observed'] },
+    { key: 'rash', labels: ['Rash observed', 'No rash observed'] },
+    { key: 'faintness', labels: ['Faintness or collapse observed', 'No faintness or collapse observed'] },
+    { key: 'alertness', labels: ['Awake and talking', 'Alert and responsive', 'Not responding'] },
+    { key: 'breathing-trend', labels: ['Breathing easier', 'Breathing harder'] },
+  ];
+  const observations = log.filter((e) => e.type === 'vitals' && e.eid === c.eid && e.note);
+  for (const group of observationGroups) {
+    const latest = [...observations].reverse().find((e) => e.type === 'vitals' && group.labels.includes(e.note ?? ''));
+    if (latest?.type === 'vitals') {
+      const tone = new Set(['Breathing difficulty observed', 'Visible swelling observed', 'Rash observed', 'Faintness or collapse observed', 'Not responding', 'Breathing harder']).has(latest.note ?? '') ? 'red' : 'plain';
+      out.push({ text: `Crew observation: ${latest.note}`, tone, t: latest.t });
+    }
+  }
+  const recognized = new Set(observationGroups.flatMap((group) => group.labels));
+  const latestOtherObservation = [...observations].reverse().find((event) => event.type === 'vitals' && event.note && !recognized.has(event.note));
+  if (latestOtherObservation?.type === 'vitals' && latestOtherObservation.note) {
+    out.push({ text: `Crew-reported observation: ${latestOtherObservation.note}`, tone: /worse|harder|not responding/i.test(latestOtherObservation.note) ? 'red' : 'plain', t: latestOtherObservation.t });
+  }
+
+  // Latest valid readings only. Plausibility checks are data-quality safeguards, not diagnoses.
   for (const st of states) {
     if (st.value === undefined) continue;
+    if (measurementError(st.m.key, st.value)) {
+      out.push({ text: `${st.m.label}: recorded value needs checking; excluded from the summary.`, tone: 'amber', t: st.t });
+      continue;
+    }
     const n = parseFloat(st.value);
     const rule = WARNING_RULES.find((w) => w.key === st.m.key && Number.isFinite(n) && w.test(n));
-    out.push({ text: `${st.m.label}: ${st.value}${rule ? ` — ${rule.rule}` : ''}`, tone: rule ? 'red' : 'plain', t: st.t });
+    out.push({ text: `${st.m.label}: ${st.value}${rule ? ` · demo alert: ${rule.rule} (not a diagnosis)` : ''}`, tone: rule ? 'red' : 'plain', t: st.t });
   }
-  // The newest thing the crew saw.
-  const seen = log.filter((e) => e.type === 'vitals' && e.eid === c.eid);
-  const last = seen[seen.length - 1];
-  if (last && last.type === 'vitals') out.push({ text: `Latest observation: ${last.note}`, tone: /worse|harder|not responding/i.test(last.note ?? '') ? 'red' : 'plain', t: last.t });
-  const unknown = states.filter((st) => st.value === undefined).map((st) => st.m.label);
-  if (unknown.length) out.push({ text: `Not known yet: ${unknown.join(', ')}`, tone: 'amber' });
-  if (patientLink && !patientLink.connected) out.push({ text: 'No live readings: the LINK band is offline', tone: 'amber' });
-  // Oldest first below the headline, so the story reads top to bottom as it happened.
+  if (patientLink && !patientLink.connected) out.push({ text: 'Wearable readings are offline; no current sensor values are available.', tone: 'amber' });
   return [out[0], ...out.slice(1).filter((x) => x.t).sort((a, b) => a.t! - b.t!), ...out.slice(1).filter((x) => !x.t)];
 }

@@ -26,15 +26,16 @@ interface Props {
   mission: MissionId;
   kb: EmergencyProtocol[];
   startWith?: string;
+  startProtocol?: string;
   onGuide: (id: string) => void;
   onClose: () => void;
 }
 
 // THE MISSION MEDICAL LIBRARY: read-only for the crew. Only Mission Control can release changes.
-export function Library({ mission, kb, startWith, onGuide, onClose }: Props) {
+export function Library({ mission, kb, startWith, startProtocol, onGuide, onClose }: Props) {
   const { entries, updates } = useLibrary();
   const log = useLog();
-  const [section, setSection] = useState<Section>('problems');
+  const [section, setSection] = useState<Section>(startProtocol ? 'emergency' : 'problems');
   const [openId, setOpenId] = useState<string | undefined>(startWith);
   const [q, setQ] = useState('');
 
@@ -100,12 +101,25 @@ export function Library({ mission, kb, startWith, onGuide, onClose }: Props) {
           {section === 'emergency' && (
             <div className="space-y-3">
               {kb.filter((p) => p.status === 'approved' && p.missions.includes(mission)).map((p) => (
-                <details key={p.id + p.version} className="border border-marble/10">
+                <details key={p.id + p.version} open={p.id === startProtocol} className="border border-marble/10">
                   <summary className="min-h-14 cursor-pointer px-4 py-3 text-base text-marble">{p.title} <span className="text-xs text-marble/50">· {p.id} v{p.version}</span></summary>
                   <div className="border-t border-marble/10 px-4 py-3 text-sm">
                     <ol className="list-decimal space-y-1 pl-5 text-marble/85">{p.steps.map((s) => <li key={s.id}>{s.text}</li>)}</ol>
                     {p.escalation.length > 0 && <p className="mt-2 text-[#ff8585]">Escalate if: {p.escalation.join(' · ')}</p>}
-                    <p className="mt-2 text-xs text-mute">{p.source.name}</p>
+                    <p className="mt-3 border-t border-marble/10 pt-2 text-xs text-mute">Onboard source record: {p.source.name}. This demonstration contains no flight-approved mission medication formulary; use only patient-specific prescribed medication and its onboard instructions. CHIRON does not calculate a dose.</p>
+                    {[...new Map(p.steps.filter((step) => step.source).map((step) => [step.source!.url, step.source!])).values()].length > 0 && (
+                      <div className="mt-3">
+                        <h3 className="font-semibold text-marble">Published guidance referenced by this onboard protocol</h3>
+                        <ul className="mt-1 space-y-2">
+                          {[...new Map(p.steps.filter((step) => step.source).map((step) => [step.source!.url, step.source!])).values()].map((source) => (
+                            <li key={source.url} className="border-l-2 border-gold/60 pl-2">
+                              <p className="text-marble">{source.label}</p>
+                              <p className="text-marble/60">{p.steps.filter((step) => step.source?.url === source.url).map((step) => step.why).join(' ')}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </details>
               ))}
