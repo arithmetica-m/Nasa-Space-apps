@@ -25,7 +25,7 @@ npm run dev -- --host
 
 ## Privacy: one shared dashboard, protected profiles
 
-The crew dashboard shows only each person's general status, CHIRON LINK connection and alert count. Medical details live in each astronaut's own profile. Selecting a profile and entering the correct PIN starts a session for that astronaut and unlocks their personal health features. Returning to the dashboard keeps the session active; **LOG OUT** clears it and locks personal features for the next user. Shared tools and emergency response remain available. The owner’s profile stays unlocked during their session; other profiles retain their access checks.
+The crew dashboard shows only each person's general status, CHIRON LINK connection and alert count. Medical details live in each astronaut's own profile. Selecting a profile and entering the correct PIN starts a session for that astronaut and unlocks their personal health features. The profile itself locks again as soon as you leave it, so it asks for that astronaut's PIN on every visit, including your own. **LOG OUT** ends the session for the next user. Shared tools and emergency response remain available without signing in.
 
 | Way in | Who | Logged? |
 | --- | --- | --- |

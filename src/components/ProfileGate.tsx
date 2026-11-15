@@ -67,7 +67,7 @@ interface Props {
   children: (as: OpenedAs) => ReactNode;   // the full medical profile
 }
 
-// An authenticated owner can revisit their profile during the session.
+// Every visit needs the owner's PIN again (the PIN entered to sign in counts for that first visit).
 // Other profiles require access checks. Two logged ways in exist for other people:
 // a medical officer with their own PIN, and emergency access with a reason.
 export function ProfileGate({ authenticatedOwner, viewer, owner, crew, health, link, now, onOpened, children }: Props) {

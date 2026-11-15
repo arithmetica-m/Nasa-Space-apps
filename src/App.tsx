@@ -146,9 +146,11 @@ export default function App() {
   const [checkInFor, setCheckInFor] = useState<string>();   // whose check-in is open
   const [pendingCheckIn, setPendingCheckIn] = useState(false); // open it once the PIN is entered
   const [addCrew, setAddCrew] = useState(false);
+  // The profile whose PIN was entered on THIS visit. Leaving the profile clears it, so every visit asks again.
+  const [profileUnlocked, setProfileUnlocked] = useState<string>();
   const me = crew.find((m) => m.id === account) ?? crew[0];
-  const openProfile = (id: string) => { if (!id) { goHome(); return; } setSelectedProfile(id); setPage('profile'); setMode('watch'); };
-  const goHome = () => { setPage('home'); setSelectedProfile(undefined); setMode('watch'); };
+  const openProfile = (id: string) => { if (!id) { goHome(); return; } setProfileUnlocked(undefined); setSelectedProfile(id); setPage('profile'); setMode('watch'); };
+  const goHome = () => { setPage('home'); setSelectedProfile(undefined); setProfileUnlocked(undefined); setMode('watch'); };
 
   const logout = () => {
     if (voice.listening) voice.toggle();
@@ -320,6 +322,7 @@ export default function App() {
   const joinAct = (eid: string) => { setJoinEid(eid); setMode('act'); };
   const leaveAct = () => { setActReason(undefined); setActPatient(undefined); setJoinEid(undefined); setMode('watch'); };
   const member = crew.find((m) => m.id === selectedProfile);
+  useEffect(() => { if (page !== 'profile') setProfileUnlocked(undefined); }, [page]);
 
   // EVERYONE IS NOTIFIED: a new emergency opens the live emergency screen on every device, once.
   useEffect(() => {
@@ -391,11 +394,11 @@ export default function App() {
           {page === 'profile' && member && !signedIn && (
             <main className="mx-auto w-full max-w-sm space-y-4 px-4 py-6">
               <button type="button" onClick={goHome} className="min-h-12 text-gold">← Back to dashboard</button>
-              <PinPad key={member.id} person={member} title={`Sign in as ${member.name}`} onOk={() => setAccount(member.id)} />
+              <PinPad key={member.id} person={member} title={`Sign in as ${member.name}`} onOk={() => { setAccount(member.id); setProfileUnlocked(member.id); }} />
             </main>
           )}
           {page === 'profile' && member && signedIn && health[member.id] && (
-            <ProfileGate key={member.id} authenticatedOwner={member.id === account} viewer={me} owner={member} crew={crew} health={health[member.id]} link={links[member.id]} now={now}
+            <ProfileGate key={member.id} authenticatedOwner={member.id === account && profileUnlocked === member.id} viewer={me} owner={member} crew={crew} health={health[member.id]} link={links[member.id]} now={now}
               onOpened={(as) => { if (as === 'owner' && pendingCheckIn) { setCheckInFor(member.id); setCheckInOpen(true); } setPendingCheckIn(false); }}>
               {(as) => (
                 <ProfilePage mission={mission} member={member} account={as === 'owner' ? member.id : '-'} health={health[member.id]} link={links[member.id]} now={now}
