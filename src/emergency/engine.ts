@@ -70,8 +70,28 @@ const has = (c: CrewMember, q: Qualification[]) => q.some((x) => c.qualification
 
 // Builds a role plan for this event. Clinical work only goes to trained crew;
 // if the Crew Medical Officer is the patient, the backup takes the lead.
-export function assignRoles(crew: CrewMember[], patientId: string, category: Category, p?: Procedure) {
-  const pool = crew.filter((c) => c.available && c.id !== patientId);
+// How CHIRON ranks people who are eligible for a role: qualification first, then
+// (1) close to the patient on a fresh LINK location, (2) skill practised recently,
+// (3) not busy (EVA or EVA preparation), (4) mission roster order as the tie-break.
+export interface RankContext {
+  place?: Record<string, { location: string; fresh: boolean; busy: boolean }>;
+  patientPlace?: string;
+  refresherDue?: Set<string>;
+}
+export function rankKey(c: CrewMember, order: number, ctx?: RankContext): number[] {
+  const p = ctx?.place?.[c.id];
+  const near = p && p.fresh && ctx?.patientPlace && p.location === ctx.patientPlace ? 0 : 1;
+  return [near, ctx?.refresherDue?.has(c.id) ? 1 : 0, p?.busy ? 1 : 0, order];
+}
+
+export function assignRoles(crew: CrewMember[], patientId: string, category: Category, p?: Procedure, ctx?: RankContext) {
+  const order = new Map(crew.map((c, i) => [c.id, i]));
+  const cmp = (a: CrewMember, b: CrewMember) => {
+    const x = rankKey(a, order.get(a.id)!, ctx), y = rankKey(b, order.get(b.id)!, ctx);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i];
+    return 0;
+  };
+  const pool = crew.filter((c) => c.available && c.id !== patientId).sort(cmp);
   const taken = new Set<string>();
   const warnings: string[] = [];
   const pick = (prefer: Qualification[], fallback = true) => {

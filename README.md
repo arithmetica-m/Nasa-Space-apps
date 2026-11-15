@@ -4,6 +4,8 @@
 
 NASA Space Apps Challenge 2026 · Challenge: *Create Health Monitoring Software for Astronauts on Space Missions*
 
+**▶ Try it live: [chiron-hazel.vercel.app](https://chiron-hazel.vercel.app)** · Mission Control console: [chiron-hazel.vercel.app/?earth](https://chiron-hazel.vercel.app/?earth)
+
 On the way to Mars, a message to Earth takes up to 22 minutes each way. There is no evacuation, the crew is four people, and the medical officer may be the one who is ill. CHIRON helps that crew **stay healthy, prepare, respond to an emergency and recover**, using what is already on board: their own readings, their training, their medical kit and approved procedures. It is named after the healer and teacher of Greek myth.
 
 > **Prototype, not a medical device.** All crew, health, wearable and stock data is simulated and labelled as such. The emergency protocols are demo protocols built from published first-aid guidance (each step cites its source); they are not NASA-approved. CHIRON guides; people decide.
@@ -49,9 +51,9 @@ npm run relay
 npm run dev -- --host
 ```
 
-Then open the "Network" address Vite prints on each device. Every device also keeps its own copy of the log, so CHIRON keeps working offline and catches up when reconnected.
+Then open the "Network" address Vite prints on each device. Every device also keeps its own copy of the log, so CHIRON keeps working offline and catches up when reconnected. The hosted site syncs tabs in one browser; syncing separate devices online needs a secure relay, set with `VITE_CHIRON_RELAY=wss://…`.
 
-**Mission Control console.** Add `?earth` to the address (for example `http://localhost:5173/?earth`) to open the only screen where the medical library can be changed.
+**Mission Control console.** Add `?earth` to the address (for example `http://localhost:5173/?earth`) to open the only screen where the medical library can be changed and where proposed baseline changes are approved.
 
 **Demo PINs** (prototype sign-in, not real security): Ana `1111` · Lena `2222` · Kai `3333` · Ravi `4444`.
 
@@ -119,7 +121,7 @@ flowchart LR
 | **TRAIN** | Personal refreshers when a skill has not been practised; practice runs built from the same protocol steps used in a real emergency; measurement guides. |
 | **RESPOND** | The live emergency screen, crew tasks, medical stock planning and the crew medical log. |
 | **RECOVER** | A daily checklist (exercise, sleep, light, water…) built from the readings that are off the person's normal and fitted into the day's schedule, with progress over time. |
-| **CHIRON LINK** | Each astronaut's simulated wearable: readings with timestamps, battery, location, the task CHIRON sent to it, and whether it was delivered. |
+| **CHIRON LINK** | Each astronaut's simulated wearable: readings with timestamps, battery, location, the task CHIRON sent to it, whether it was delivered, and the **Medical State Capsule**: an offline copy of their medical state that reconciles with CORE when the band reconnects (try *Disconnect band*, *Record on band*, *Reconnect*, *Sync and reconcile* on the LINK page). |
 | **Medical library** | Read-only on board; only Mission Control can release a new version. Advice is looked up here, fitted to the person's medical record, never generated. |
 
 ---
@@ -235,8 +237,10 @@ For every source: what kind of source it is, what it provides, which need it add
 | Body map, symptom checker, plain-language advice | Readiness simulation | Predictive models validated by medical teams |
 | Read-only medical library, changed only by Mission Control | Crew task suggestions with reasons | Automated resource intelligence |
 | Emergency mode on every device: live patient status, crew tasks, follow-ups and backups | Procedure handover | Adaptive, medically approved rehabilitation |
-| Response Planner overview | Stock planning | More onboard autonomy |
-| Automatic private reports to Earth | Training recommendations | |
+| Response Planner overview; transparent task ranking (qualification, proximity, training recency, workload, roster tie-break); assignments PROPOSED until the response lead confirms | Stock planning with reservations for active emergencies and device service dates | More onboard autonomy |
+| Automatic private reports to Earth with their states (prepared → queued → transmitted → received → reviewed → response received) | Training recommendations | |
+| Alert lifecycle on the dashboard: generated, sent, delivered, acknowledged, reviewed (medical officer PIN), resolved | Medical State Capsule: offline copy on each band, entries recorded offline, conflict-aware reconciliation on reconnect | Physical Capsule on a real band |
+| Library updates integrity-checked (demo key); personal baselines proposed on board and approved by Mission Control as new versions | | Public-key signatures; baselines feeding the health flags |
 | Recovery checklist and timelines, medical log, voice commands, adding a crew member from a file | | |
 
 ---

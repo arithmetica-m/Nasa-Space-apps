@@ -1,10 +1,12 @@
 import type { MissionId } from '../types';
+import type { ChironEvent } from '../emergency/events';
 import type { Category, Procedure } from '../emergency/types';
 import { crew, inventoryFor } from '../emergency/data';
 import { assignRoles, checkResources, resolveProcedure } from '../emergency/engine';
 import { DELAY_MIN } from '../emergency/plan';
 import { categoryText } from '../emergency/report';
 import { skillStatus } from '../train/training';
+import { bandInfo } from '../link/link';
 
 // MISSION MEDICAL READINESS SIMULATION (Level 2).
 // For each emergency scenario, CHIRON plays it through with the real engine: which approved
@@ -24,7 +26,7 @@ export interface ScenarioCheck {
   logic: string[];
 }
 
-export function readiness(kb: Procedure[], mission: MissionId): ScenarioCheck[] {
+export function readiness(kb: Procedure[], mission: MissionId, log?: ChironEvent[]): ScenarioCheck[] {
   const inventory = inventoryFor(mission);
   const delay = DELAY_MIN[mission];
   return (['dcs', 'respiratory', 'anaphylaxis', 'behavioral'] as Category[]).map((category) => {
@@ -70,6 +72,12 @@ export function readiness(kb: Procedure[], mission: MissionId): ScenarioCheck[] 
       if (s?.due) gaps.push({ text: `${m.name.split(' ')[0]} last practised this ${s.daysSince} days ago.`, fix: `${m.name.split(' ')[0]}: practise it again now.`, action: 'practice', who: m.id });
       if (s) logic.push(`Training: ${m.name.split(' ')[0]} practised ${s.daysSince} days ago (demo rule: medical crew refresh every 60 days).`);
     }
+
+    // Crew availability: a band that is offline means alerts and tasks may not reach that person.
+    for (const m of crew.filter((x) => !bandInfo(x.id, log).connected)) {
+      gaps.push({ text: `${m.name.split(' ')[0]}’s LINK band is offline: alerts and tasks may not reach them.`, fix: `Check ${m.name.split(' ')[0]}’s band and battery today.` });
+    }
+    if (procedure) logic.push(`Protocol version: ${procedure.id} v${procedure.version}, the newest approved for this mission. Steps that depend on equipment were checked against the stock.`);
 
     // Help from Earth.
     if (delay >= 5) gaps.push({ text: `Earth is ${delay} min away each way: no live help.`, fix: 'Practise the whole emergency without asking Earth.', action: 'practice' });

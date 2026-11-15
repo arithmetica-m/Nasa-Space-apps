@@ -45,7 +45,15 @@ export const WARNING_RULES: { key: LinkReading['key']; rule: string; test: (v: n
 ];
 
 // Apply readings the band has sent to CORE (shared log), newest first, and check the warning rules.
-export function withLinkEvents(s: LinkStatus, log: ChironEvent[]): LinkStatus {
+export function withLinkEvents(s0: LinkStatus, log: ChironEvent[]): LinkStatus {
+  // A band connected or disconnected during the session (simulated).
+  const ev = [...log].reverse().find((e) => e.type === 'band' && e.crewId === s0.crewId);
+  let s = s0;
+  if (ev && ev.type === 'band' && ev.connected !== s0.connected) {
+    s = ev.connected
+      ? { ...s0, connected: true, lastSync: Math.max(ev.t, s0.lastSync), readings: s0.readings.map((r) => ({ ...r, live: r.key !== 'sleep', t: r.key === 'sleep' ? r.t : ev.t })), alerts: s0.alerts.filter((a) => !/disconnected/i.test(a)) }
+      : { ...s0, connected: false, lastSync: ev.t, readings: s0.readings.map((r) => ({ ...r, live: false })), alerts: ['Band disconnected. No live data.', ...s0.alerts] };
+  }
   if (!s.connected) return s;
   const mine = log.filter((e) => (e.type === 'link-reading' || e.type === 'link-clear') && e.crewId === s.crewId);
   const lastClear = Math.max(0, ...mine.filter((e) => e.type === 'link-clear').map((e) => e.t));
@@ -87,6 +95,16 @@ export function useNow(everyMs = 10_000) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), everyMs); return () => clearInterval(t); }, [everyMs]);
   return now;
+}
+
+// Where a band is and whether it is connected, without health data (used for task ranking).
+export function bandInfo(crewId: string, log?: ChironEvent[]): { location: string; connected: boolean; eva: boolean; activity: string } {
+  const own = crew.find((c) => c.id === crewId)?.band;
+  const b = BANDS[crewId] ?? (own ? { connected: true, location: own.location, eva: false, activity: own.activity } : { connected: false, location: 'Unknown', eva: false, activity: 'Unknown' });
+  // A band connected or disconnected during the session overrides the simulated setting.
+  const ev = log && [...log].reverse().find((e) => e.type === 'band' && e.crewId === crewId);
+  const connected = ev && ev.type === 'band' ? ev.connected : b.connected;
+  return { location: b.location, connected, eva: b.eva, activity: b.activity };
 }
 
 export function linkFor(crewId: string, records: DayRecord[], now: number): LinkStatus {

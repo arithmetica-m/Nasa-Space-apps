@@ -33,7 +33,7 @@ interface Props {
 
 // THE MISSION MEDICAL LIBRARY: read-only for the crew. Only Mission Control can release changes.
 export function Library({ mission, kb, startWith, startProtocol, onGuide, onClose }: Props) {
-  const { entries, updates } = useLibrary();
+  const { entries, updates, rejected } = useLibrary();
   const log = useLog();
   const [section, setSection] = useState<Section>(startProtocol ? 'emergency' : 'problems');
   const [openId, setOpenId] = useState<string | undefined>(startWith);
@@ -169,10 +169,19 @@ export function Library({ mission, kb, startWith, startProtocol, onGuide, onClos
                   <li key={u.id + u.version} className="border border-[#8fb8ff]/30 px-4 py-3">
                     <div className="text-base text-marble">{u.title} → v{u.version}</div>
                     <div className="text-sm text-marble/60">{new Date(u.t).toISOString().slice(0, 16).replace('T', ' ')} GMT · {u.note}</div>
+                    <div className="text-sm text-[#7bd5b8]">✓ From Mission Control · integrity check passed (demo key)</div>
                     <button type="button" onClick={() => { setSection('problems'); setOpenId(u.id); }} className="mt-1 font-mono text-xs tracking-[0.15em] text-gold">READ IT</button>
                   </li>
                 ))}
               </ul>
+              {rejected.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="text-base text-[#ff9c9c]">Rejected updates</h3>
+                  <ul className="mt-2 space-y-2">
+                    {rejected.map((r) => <li key={r.t + r.title} className="border border-[#e45b5b]/40 px-4 py-2 text-sm text-marble/80">{r.title} v{r.version} · {r.reason}</li>)}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </main>

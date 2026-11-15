@@ -182,6 +182,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
 
   const patientMed = medicalOf(c.patientId);
   const recordText = [...patientMed.allergies, ...patientMed.history, ...patientMed.medications, ...patientMed.restrictions].join(' ').toLowerCase();
+  const capsuleAt = (() => { try { return (JSON.parse(localStorage.getItem(`chiron-capsule-v1-${c.patientId}`) ?? 'null') as { syncedAt?: number } | null)?.syncedAt; } catch { return undefined; } })();
   const happening = situation(c, plan, states, log, links[c.patientId]);
   const saveMeasurement = (key: string) => {
     const value = (draft[key] ?? '').trim();
@@ -270,6 +271,17 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
         {header}
         {speakNow}
         <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 p-4 pb-16 md:p-6">
+          {assigned.length > 0 && (plan.confirmed ? (
+            <p className="border-l-4 border-[#5cc8a8] bg-[#5cc8a8]/10 px-4 py-3 text-xl text-[#9be3cc]">CONFIRMED by {crew.find((m) => m.id === plan.confirmedAt?.by)?.name ?? 'the response lead'} at {hm(plan.confirmedAt!.t)}. Any change makes them PROPOSED again.</p>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3 border-2 border-[#e39b4b] bg-[#e39b4b]/10 p-4">
+              <p className="min-w-[240px] flex-1 text-xl text-[#ffd9a8]">
+                {plan.confirmedAt ? 'Assignments changed since they were confirmed. They are PROPOSED again.' : 'These assignments are PROPOSED by CHIRON.'} {plan.roles.lead.person ? `${plan.roles.lead.person.name.split(' ')[0]}, as response lead, confirms them or changes roles below.` : 'The response lead confirms them.'} Steps can start now.
+              </p>
+              <button type="button" onClick={() => publish({ type: 'confirm-roles', eid, by: plan.roles.lead.person?.id ?? account, lead: plan.roles.lead.person?.id, roles: Object.fromEntries(Object.entries(plan.roles).map(([r, a]) => [r, a.person?.id ?? ''])) })}
+                className="min-h-16 bg-[#e39b4b] px-6 text-xl font-bold text-[#17100a]">CONFIRM ASSIGNMENTS</button>
+            </div>
+          ))}
           <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(280px, 1fr))` }}>
             {assigned.map((l) => {
               const theirs = plan.tasks.filter((t) => l.roles.includes(t.step.role));
@@ -280,6 +292,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <h2 className="text-3xl font-bold text-marble">{l.member.name.split(' ')[0]}</h2>
                       <span className={`border-2 px-2 py-0.5 text-base font-semibold ${stateColor[l.taskState!]}`}>{l.taskState}</span>
+                      {!plan.confirmed && <span className="border-2 border-[#e39b4b]/70 px-2 py-0.5 text-base font-semibold text-[#f3c28d]">PROPOSED</span>}
                     </div>
                     <div className="text-xl text-gold">{l.roleText}</div>
                     {offline && <div className="mt-1 text-lg text-[#f3c28d]">Band offline: tell them in person</div>}
@@ -453,6 +466,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
         {tab === 'record' && (
           <section className="border border-[#e5c27b]/40 bg-[#e5c27b]/[0.04] p-4">
             <h2 className="text-xl font-semibold text-marble">{plan.patient.name}’s medical record</h2>
+            <p className="text-base text-[#bcd3ff]">Also on {plan.patient.name.split(' ')[0]}’s band (Medical State Capsule){capsuleAt ? `, synced ${hm(capsuleAt)}` : ''}: readable even if CORE is down.</p>
             {!medicalAccessed ? (
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <label className="min-w-[220px] flex-1 text-lg text-marble/70">Why do you need it?
@@ -486,6 +500,32 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
           <section className="border border-[#8fb8ff]/40 bg-[#8fb8ff]/[0.06] p-4">
             <p className="text-xl text-marble">Earth is updated automatically: {lastReport ? `${lastReport.report!.n === 1 ? 'first report' : `update ${lastReport.report!.n}`} ${lastReport.arrivesAt <= now ? 'arrived' : lastReport.arrivesAt - now < 60_000 ? 'arrives in seconds' : `arrives in ${Math.round((lastReport.arrivesAt - now) / 60_000)} min`}` : 'writing the first report'}.</p>
             <button type="button" onClick={sendReport} className="mt-3 min-h-14 border-2 border-[#8fb8ff]/60 px-5 text-lg text-[#d7e4ff]">SEND AN UPDATE NOW</button>
+            <ol className="mt-3 space-y-2" aria-label="Reports to Earth">
+              {[...reports].reverse().map((r) => {
+                const reply = c.messages.find((m) => m.direction === 'in');
+                const first = r.report!.n === 1;
+                const offline = typeof navigator !== 'undefined' && !navigator.onLine;
+                const states: [string, boolean, string][] = [
+                  ['PREPARED', true, hm(r.sentAt || c.startedAt)],
+                  ['QUEUED', true, offline && r.arrivesAt > now ? 'link down: waiting' : 'ready to send'],
+                  ['TRANSMITTED', !!r.sentAt && !(offline && r.arrivesAt > now), r.sentAt ? hm(r.sentAt) : 'not yet'],
+                  ['RECEIVED', r.arrivesAt <= now, r.arrivesAt <= now ? hm(r.arrivesAt) : `in ${Math.max(1, Math.round((r.arrivesAt - now) / 60_000))} min`],
+                  ['REVIEWED', first && !!reply && reply.sentAt <= now, first && reply ? (reply.sentAt <= now ? hm(reply.sentAt) : 'not yet') : 'not yet'],
+                  ['RESPONSE RECEIVED', first && !!reply && reply.arrivesAt <= now, first && reply ? (reply.arrivesAt <= now ? hm(reply.arrivesAt) : `expected in ${Math.max(1, Math.round((reply.arrivesAt - now) / 60_000))} min`) : 'not yet'],
+                ];
+                return (
+                  <li key={r.id} className="border border-marble/15 p-3">
+                    <div className="text-lg text-marble">{first ? 'First report' : `Update ${r.report!.n}`}</div>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-base">
+                      {states.map(([label, done, detail]) => (
+                        <span key={label} className={done ? 'text-marble' : 'text-marble/45'}>{done ? <Check size={14} className="mr-1 inline text-[#7bd5b8]" /> : '○ '}{label} <span className="text-marble/50">· {detail}</span></span>
+                      ))}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+            <p className="mt-2 text-base text-marble/60">Earth cannot answer right away: keep following the steps. Earth's replies are simulated in this prototype.</p>
             {lastReport && <pre className="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap border border-marble/10 bg-void/70 p-3 font-sans text-base leading-relaxed text-marble/85">{lastReport.body}</pre>}
           </section>
         )}

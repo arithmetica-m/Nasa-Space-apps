@@ -49,6 +49,8 @@ export interface InventoryItem {
   expires?: string;
   storage?: string;
   status: ItemStatus;
+  maintenanceDue?: string;          // next calibration or service date
+  reservedFor?: { eid: string; who: string; quantity: number }[];   // held for an active emergency
   log: { time: string; by: string; change: string }[];
 }
 

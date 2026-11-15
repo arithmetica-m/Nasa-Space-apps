@@ -19,7 +19,7 @@ export function MissionChooser({ hovered, onHover, onPick }: Props) {
         </p>
       </div>
       <div className="min-h-12 flex-1" aria-hidden="true" />
-      <nav aria-label="Mission options" className="mx-auto grid w-full max-w-6xl shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <nav aria-label="Mission options" className="mx-auto grid w-full max-w-6xl shrink-0 grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
         {missionOrder.map((id) => {
           const mission = missions[id];
           const lit = hovered === id;
@@ -27,7 +27,7 @@ export function MissionChooser({ hovered, onHover, onPick }: Props) {
             <button key={id} type="button"
               onMouseEnter={() => onHover(id)} onMouseLeave={() => onHover(undefined)}
               onFocus={() => onHover(id)} onBlur={() => onHover(undefined)} onClick={() => onPick(id)}
-              className={`min-h-24 min-w-0 border px-4 py-4 text-left backdrop-blur-md transition duration-300 ${lit ? 'border-gold/80 bg-void/90' : 'border-marble/25 bg-void/80 hover:border-gold/60'}`}>
+              className={`min-h-16 min-w-0 border px-4 py-3 text-left backdrop-blur-md transition duration-300 ${lit ? 'border-gold/80 bg-void/90' : 'border-marble/25 bg-void/80 hover:border-gold/60'}`}>
               <span className={`block break-words font-serif text-sm tracking-[0.15em] ${lit ? 'text-gold' : 'text-marble'}`}>{mission.name.toUpperCase()}</span>
               <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] leading-relaxed tracking-[0.1em] text-mute">
                 <span>{mission.totalDays} DAYS</span>

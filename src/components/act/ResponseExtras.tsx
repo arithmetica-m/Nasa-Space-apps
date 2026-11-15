@@ -7,6 +7,7 @@ import type { ChironEvent } from '../../emergency/events';
 import { crew } from '../../emergency/data';
 import { ago, type LinkStatus } from '../../link/link';
 import { medicalOf } from '../../library/advice';
+import { skillStatus } from '../../train/training';
 import { Reasoning, type ReasonStep } from '../Reasoning';
 
 const hm = (t: number) => `${new Date(t).toISOString().slice(11, 16)} GMT`;
@@ -92,7 +93,11 @@ export function roleReasons(role: RoleId, person: CrewMember | undefined, plan: 
     l ? (pl && l.location === pl.location ? `Location: in the ${l.location}, with the patient.` : `Location: ${l.connected ? '' : 'last known '}${l.location}${pl ? ` (patient in the ${pl.location})` : ''}.`) : 'Location: unknown.',
     l ? `Current work: ${l.activity}.` : 'Current work: unknown.',
   ];
-  if (l && !l.connected) out.push('Their LINK band is offline: tell them in person.');
+  if (l && !l.connected) out.push('Their LINK band is offline: location is LAST KNOWN, not verified. Tell them in person.');
+  else if (l) out.push(`Location source: their LINK band, synced ${ago(l.lastSync, Date.now())}.`);
+  const skill = skillStatus(person.id, c.mission).find((x) => x.skill.id === c.category);
+  if (skill) out.push(`Training: practised this ${skill.daysSince} days ago${skill.due ? ' (refresher due: ranked lower)' : ''}.`);
+  out.push('Ranking: right qualification first, then close to the patient, then recent training, then not busy; mission roster order breaks a tie.');
   return out;
 }
 

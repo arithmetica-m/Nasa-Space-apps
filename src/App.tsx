@@ -32,6 +32,7 @@ import { readiness } from './prevent/readiness';
 import { plansFor } from './recover/recovery';
 import { PinPad, ProfileGate } from './components/ProfileGate';
 import { AddCrew } from './components/AddCrew';
+import { accessRole } from './access/access';
 import { DemoPage, type DemoAction } from './components/pages/DemoPage';
 import { publish } from './emergency/sync';
 import { SosAlerts } from './components/SosAlerts';
@@ -254,15 +255,15 @@ export default function App() {
   const tiles = useMemo<Record<MedicalPart, string>>(() => {
     if (!mission) return { prevent: '', train: '', respond: '', recover: '' };
     const due = signedIn ? skillStatus(account, mission.id).filter((s) => s.due).length : 0;
-    const gaps = readiness(kb, mission.id).filter((r) => !r.ready).length;
+    const gaps = readiness(kb, mission.id, log).filter((r) => !r.ready).length;
     const todo = plansFor(account, recordsByCrew[account] ?? []).length;
     return {
-      prevent: gaps ? `${gaps} emergencies need preparation` : 'Crew is prepared',
-      train: !signedIn ? 'Emergency practice and measurement guides' : due ? `${due} refresher${due > 1 ? 's' : ''} due for you` : 'Your skills are up to date',
+      prevent: 'Baselines, warnings and the next mission event',
+      train: `${gaps ? `Readiness: ${gaps} emergencies need preparation` : 'Readiness: crew prepared'}${signedIn && due ? ` · ${due} refresher${due > 1 ? 's' : ''} due` : ''}`,
       respond: activeCases.length ? `${activeCases.length} ACTIVE EMERGENCY` : status.label === 'CHECK STOCK' ? 'No emergencies · check stock' : 'No active emergencies',
       recover: !signedIn ? 'Sign in for your recovery plan' : todo ? `${todo} reading${todo > 1 ? 's' : ''} to bring back to normal` : 'You are at your normal',
     };
-  }, [mission, account, signedIn, kb, recordsByCrew, activeCases, status]);
+  }, [mission, account, signedIn, kb, recordsByCrew, activeCases, status, log]);
   const openMedical = (part: MedicalPart) => {
     setMode('watch');
     if (part === 'recover' && !signedIn) { goHome(); return; }
@@ -341,7 +342,7 @@ export default function App() {
 
   // The demonstration: each step opens the real screen and, where needed, makes the simulated event happen.
   const demo = (a: DemoAction) => {
-    if (a === 'prepare') { setTrainFocus('prevent'); setPage('train'); }
+    if (a === 'prepare') { setTrainFocus('train'); setPage('train'); }
     if (a === 'monitor') { publish({ type: 'link-reading', by: 'ana', crewId: 'ana', key: 'spo2', value: 89 }); goHome(); }
     if (a === 'emergency') openAct('LINK warning: blood oxygen 89%', 'ana');
     if (a === 'coordinate') setPage('link');
@@ -401,7 +402,7 @@ export default function App() {
             <ProfileGate key={member.id} authenticatedOwner={member.id === account && profileUnlocked === member.id} viewer={me} owner={member} crew={crew} health={health[member.id]} link={links[member.id]} now={now}
               onOpened={(as) => { if (as === 'owner' && pendingCheckIn) { setCheckInFor(member.id); setCheckInOpen(true); } setPendingCheckIn(false); }}>
               {(as) => (
-                <ProfilePage mission={mission} member={member} account={as === 'owner' ? member.id : '-'} health={health[member.id]} link={links[member.id]} now={now}
+                <ProfilePage mission={mission} member={member} account={as === 'owner' ? member.id : '-'} canProposeBaseline={as === 'medical' || (as === 'owner' && accessRole(member) === 'medical')} proposer={as === 'owner' ? member.id : account || 'medical-officer'} health={health[member.id]} link={links[member.id]} now={now}
                   records={records} marks={marks} selection={selection} onSelect={setSelection}
                   checkedIn={!!todayCheckIn} symptoms={todayCheckIn?.symptoms ?? []}
                   memory={missionMemory(log, mission.id, missionCheckIns, member.id)}
@@ -475,17 +476,22 @@ export default function App() {
         </div>
       )}
 
-      {phase === 'mission' && (
-        <button type="button" onClick={() => mode !== 'act' && openAct()} disabled={mode === 'act'}
+      {/* Hidden while the emergency screen is open: it would only cover the screen it opens. */}
+      {phase === 'mission' && mode !== 'act' && (
+        <button type="button" onClick={() => openAct()}
           className="fixed bottom-4 right-4 z-[55] flex min-h-14 items-center gap-2 border-2 border-[#e45b5b] bg-[#1a0b10]/95 px-5 font-mono text-xs font-semibold tracking-[0.16em] text-[#ff8585] shadow-lg backdrop-blur transition hover:bg-[#e45b5b]/20 disabled:cursor-default"
-          aria-label={mode === 'act' ? 'Emergency mode active' : 'Open emergency mode'}>
+          aria-label="Open emergency mode">
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#e45b5b]" />
           EMERGENCY MODE
         </button>
       )}
-      <div className="pointer-events-none fixed bottom-1 left-3 z-40 text-[10px] text-mute/60">
-        Simulated data for demonstration. Not clinical guidance.
-      </div>
+      {/* Small screens: the note would sit on top of content, so it shows on wider screens only
+          (the same notice is on the About and demonstration pages and in each section). */}
+      {mode !== 'act' && (
+        <div className="pointer-events-none fixed bottom-1 left-3 z-40 hidden bg-void/70 px-1 text-[10px] text-mute/70 md:block">
+          Simulated data for demonstration. Not clinical guidance.
+        </div>
+      )}
     </div>
   );
 }

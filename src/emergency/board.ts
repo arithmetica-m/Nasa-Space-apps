@@ -62,6 +62,7 @@ export function liveUpdates(c: EmergencyCase, plan: Plan, log: ChironEvent[], no
   for (const m of c.measures) out.push({ t: m.t, text: `${plan.procedure?.measurements?.find((x) => x.key === m.key)?.label ?? m.key}: ${m.value} (${m.source === 'link' ? 'LINK band, simulated' : m.source === 'device' ? 'blood-pressure cuff, simulated' : `measured by ${nameOf(m.by)}`})`, tone: 'plain' });
   for (const [role, a] of Object.entries(c.assignments) as [RoleId, { crewId: string; t: number; by: string }][]) out.push({ t: a.t, text: `${roleName[role]} is now ${nameOf(a.crewId)} (changed by ${nameOf(a.by)})`, tone: 'amber' });
   for (const e of log) {
+    if (e.type === 'confirm-roles' && e.eid === c.eid) out.push({ t: e.t, text: `Assignments confirmed by ${nameOf(e.by)}`, tone: 'plain' });
     if (e.type === 'vitals' && e.eid === c.eid) out.push({ t: e.t, text: `${nameOf(e.by)} observed: ${e.note}`, tone: /worse|harder|not responding/i.test(e.note ?? '') ? 'red' : 'plain' });
     if (e.type === 'verify' && e.eid === c.eid) out.push({ t: e.t, text: `${nameOf(e.by)} confirmed: ${stepText(e.stepId)}`, tone: 'plain' });
   }

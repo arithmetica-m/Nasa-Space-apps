@@ -7,6 +7,7 @@ import { statusColor, statusLabel } from '../../lib/crewHealth';
 import { ago, type LinkStatus } from '../../link/link';
 import type { MemoryItem } from '../../lib/memory';
 import { BackToNormal } from '../BackToNormal';
+import { BaselinePanel } from '../BaselinePanel';
 import { ReadingTimelines } from '../ReadingTimelines';
 import { MedicalLog } from '../MedicalLog';
 import { ReportSomething } from '../ReportSomething';
@@ -31,6 +32,8 @@ interface Props {
   mission: Mission;
   member: CrewMember;
   account: string;
+  canProposeBaseline?: boolean;
+  proposer?: string;
   health: CrewHealth;
   link: LinkStatus;
   now: number;
@@ -113,6 +116,7 @@ export function ProfilePage(p: Props) {
         <>
           <div>
             <HealthRecord mission={p.mission} records={p.records} marks={p.marks} selection={p.selection} onSelect={p.onSelect} />
+            <div className="mt-4"><BaselinePanel member={p.member} canPropose={!!p.canProposeBaseline} proposer={p.proposer ?? p.member.id} /></div>
             <ReadingTimelines mission={p.mission} records={p.records} crewId={p.member.id} />
           </div>
           <MedicalLog items={p.memory} />

@@ -1,7 +1,7 @@
 import { Siren } from 'lucide-react';
 import type { Mission } from '../../types';
 import type { Procedure } from '../../emergency/types';
-import { casesFrom, inventoryNow } from '../../emergency/plan';
+import { casesFrom, inventoryNow, withReservations } from '../../emergency/plan';
 import { checkResources } from '../../emergency/engine';
 import { categoryText } from '../../emergency/report';
 import { crew } from '../../emergency/data';
@@ -24,7 +24,8 @@ interface Props {
 export function RespondPage({ mission, kb, memory, crewWide, onStart, onJoin }: Props) {
   const log = useLog();
   const active = casesFrom(log).filter((c) => !c.ended && c.mission === mission.id);
-  const stock = inventoryNow(log, mission.id);
+  const stock = withReservations(inventoryNow(log, mission.id), active, kb);
+  const today = new Date().toISOString().slice(0, 10);
   const protocols = kb.filter((p) => p.status === 'approved' && p.missions.includes(mission.id));
   const missionEnd = new Date(Date.now() + (mission.totalDays - mission.today) * 86_400_000).toISOString().slice(0, 10);
 
@@ -37,6 +38,9 @@ export function RespondPage({ mission, kb, memory, crewWide, onStart, onJoin }: 
     if (needs.length && item.quantity < maxQty) problems.push(`Only ${item.quantity} on board; a protocol needs ${maxQty}.`);
     if (needs.length && item.quantity === maxQty && item.status === 'available') problems.push('Enough for one use only.');
     if (item.expires && item.expires < missionEnd) problems.push(`Expires ${item.expires}, before the mission ends (${missionEnd}).`);
+    if (item.maintenanceDue && item.maintenanceDue < today) problems.push(`Service overdue since ${item.maintenanceDue}: check calibration before use.`);
+    else if (item.maintenanceDue && item.maintenanceDue < missionEnd) problems.push(`Service due ${item.maintenanceDue}, before the mission ends.`);
+    for (const r of item.reservedFor ?? []) problems.push(`${r.quantity} held for ${r.who}'s emergency.`);
     const alts = needs.flatMap((n) => n.alts).map((id) => stock.find((s) => s.id === id)?.name).filter(Boolean);
     return { item, needs, problems, alts };
   });
@@ -90,7 +94,7 @@ export function RespondPage({ mission, kb, memory, crewWide, onStart, onJoin }: 
                 <span className="text-base text-marble">{item.name}</span>
                 <span className={`font-mono text-xs tracking-[0.15em] ${problems.length ? 'text-[#f3c28d]' : 'text-[#7bd5b8]'}`}>{problems.length ? 'CHECK' : 'OK'}</span>
               </div>
-              <p className="text-sm text-marble/55">{item.quantity} on board · {item.location} · needed for: {[...new Set(needs.map((n) => n.p.title))].join(', ')}</p>
+              <p className="text-sm text-marble/55">{item.quantity} free on board · {item.location}{item.maintenanceDue ? ` · service ${item.maintenanceDue}` : ''} · needed for: {[...new Set(needs.map((n) => n.p.title))].join(', ')}</p>
               {problems.map((pr) => <p key={pr} className="text-sm text-[#f3c28d]">• {pr}</p>)}
               {problems.length > 0 && alts.length > 0 && <p className="text-sm text-marble/60">Approved alternative listed in the procedure: {alts.join(', ')}.</p>}
             </li>

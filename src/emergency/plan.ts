@@ -2,7 +2,9 @@ import type { MissionId } from '../types';
 import type { ChironEvent } from './events';
 import type { Category, CrewMember, EarthMessage, InventoryItem, Procedure, RoleId, Step } from './types';
 import { crew as baseCrew, inventoryFor } from './data';
-import { assignRoles, checkResources, resolveProcedure, roleName, type ResourceCheck, type Roles } from './engine';
+import { assignRoles, checkResources, resolveProcedure, roleName, type RankContext, type ResourceCheck, type Roles } from './engine';
+import { bandInfo } from '../link/link';
+import { skillStatus } from '../train/training';
 
 // Demo scale for signal travel: one real second stands for one minute.
 export const DELAY_MIN: Record<MissionId, number> = { iss: 0.05, moon: 0.05, 'mars-transit': 11, 'mars-surface': 18 };
@@ -15,6 +17,24 @@ export function crewNow(log: ChironEvent[]): CrewMember[] {
   const avail = new Map<string, boolean>();
   for (const e of log) if (e.type === 'crew') avail.set(e.crewId, e.available);
   return baseCrew.map((c) => ({ ...c, available: avail.get(c.id) ?? c.available }));
+}
+
+// Equipment held by active emergencies, oldest first. A later emergency sees only what is left.
+export function withReservations(items: InventoryItem[], cases: EmergencyCase[], kb: Procedure[], exceptEid?: string): InventoryItem[] {
+  const out = items.map((i) => ({ ...i, reservedFor: [] as NonNullable<InventoryItem['reservedFor']> }));
+  for (const c of [...cases].filter((x) => !x.ended && x.eid !== exceptEid).sort((a, b) => a.startedAt - b.startedAt)) {
+    const { procedure } = resolveProcedure(kb, c.category, c.mission);
+    for (const req of procedure?.equipment ?? []) {
+      const it = out.find((i) => i.id === req.itemId);
+      if (!it) continue;
+      const take = Math.min(req.quantity, it.quantity);
+      if (take <= 0) continue;
+      it.quantity -= take;
+      it.reservedFor.push({ eid: c.eid, who: name(c.patientId), quantity: take });
+      if (it.quantity <= 0 && it.status === 'available') it.status = 'reserved';
+    }
+  }
+  return out;
 }
 
 export function inventoryNow(log: ChironEvent[], mission: MissionId): InventoryItem[] {
@@ -97,6 +117,8 @@ export interface Plan {
   tasks: Task[];
   alerts: string[];
   patient: CrewMember;
+  confirmed: boolean;            // the lead confirmed exactly these assignments
+  confirmedAt?: { t: number; by: string };
 }
 
 export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[], allCases: EmergencyCase[]): Plan {
@@ -106,13 +128,18 @@ export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[],
   const pool = crew.map((m) => (busyPatients.has(m.id) ? { ...m, available: false } : m));
   const patient = crew.find((m) => m.id === c.patientId)!;
   const { procedure, reason } = resolveProcedure(kb, c.category, c.mission);
-  const { roles, warnings } = assignRoles(pool, c.patientId, c.category, procedure);
+  const ctx: RankContext = {
+    place: Object.fromEntries(pool.map((m) => { const b = bandInfo(m.id, log); return [m.id, { location: b.location, fresh: b.connected, busy: b.eva || /EVA/.test(b.activity) }]; })),
+    patientPlace: bandInfo(c.patientId, log).location,
+    refresherDue: new Set(pool.filter((m) => skillStatus(m.id, c.mission).find((x) => x.skill.id === c.category)?.due).map((m) => m.id)),
+  };
+  const { roles, warnings } = assignRoles(pool, c.patientId, c.category, procedure, ctx);
   // The crew can change any suggestion. Their choice always wins.
   for (const [role, a] of Object.entries(c.assignments) as [RoleId, { crewId: string }][]) {
     const person = crew.find((m) => m.id === a.crewId);
     if (person) roles[role] = { person, note: 'Chosen by the crew' };
   }
-  const inventory = inventoryNow(log, c.mission);
+  const inventory = withReservations(inventoryNow(log, c.mission), allCases.filter((x) => x.mission === c.mission && x.startedAt < c.startedAt), kb, c.eid);
   const checks = procedure ? checkResources(procedure, inventory) : [];
   const alerts: string[] = [];
 
@@ -155,7 +182,12 @@ export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[],
       return { step, status, assignee: roles[step.role].person, waitingFor, blockedBy: unusable ? `${unusable.name} is ${unusable.status}` : undefined };
     });
 
-  return { procedure, missing: reason, roles, warnings, checks, tasks, alerts, patient };
+  // Assignments stay PROPOSED until the response lead confirms them. Any later change
+  // (a reassignment, someone becoming unavailable) makes them PROPOSED again.
+  const conf = [...log].reverse().find((e) => e.type === 'confirm-roles' && e.eid === c.eid);
+  const current = Object.fromEntries((Object.keys(roles) as RoleId[]).map((r) => [r, roles[r].person?.id ?? '']));
+  const confirmed = !!conf && conf.type === 'confirm-roles' && (Object.keys(current) as RoleId[]).every((r) => (conf.roles[r] ?? '') === current[r]);
+  return { procedure, missing: reason, roles, warnings, checks, tasks, alerts, patient, confirmed, confirmedAt: conf ? { t: conf.t, by: conf.by } : undefined };
 }
 
 export { roleName };

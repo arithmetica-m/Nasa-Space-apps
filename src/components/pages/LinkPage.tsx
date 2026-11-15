@@ -9,6 +9,7 @@ import { publish, useLog } from '../../emergency/sync';
 import { HAPTICS, ago, type LinkStatus } from '../../link/link';
 import { PageShell, Panel, Tag } from './ui';
 import { LinkFlow } from './LinkFlow';
+import { CapsulePanel } from '../CapsulePanel';
 import { roleOf } from '../MissionDashboard';
 
 interface Props {
@@ -36,7 +37,7 @@ export function LinkPage({ mission, crew, links, kb, now, onProfile, account, on
         const entry = l.state === 'PATIENT'
           ? { eid: c.eid, head: 'MEDICAL EMERGENCY ACTIVE', tone: 'red' as const, lines: [`${l.member.name} · ${what}`, plan.roles.lead.person ? `${plan.roles.lead.person.name.split(' ')[0]} is leading. Stay still: your crew is helping.` : 'Stay still: your crew is helping.', `Crew progress: ${plan.tasks.filter((t) => t.status === 'done' || t.status === 'cannot').length} of ${plan.tasks.length} steps`] }
           : l.state === 'ASSIGNED'
-            ? { eid: c.eid, head: 'EMERGENCY — TASK ASSIGNED', tone: 'gold' as const, lines: [`${plan.patient.name.split(' ')[0]} · ${what}`, `Your role: ${l.roleText}`, `Now: ${l.responsibility}`, `Status: ${l.taskState} · step ${Math.min(l.done + 1, l.total)} of ${l.total}`] }
+            ? { eid: c.eid, head: 'EMERGENCY — TASK ASSIGNED', tone: 'gold' as const, lines: [`${plan.patient.name.split(' ')[0]} · ${what}`, `Your role: ${l.roleText}`, `Now: ${l.responsibility}`, `Status: ${l.taskState} · step ${Math.min(l.done + 1, l.total)} of ${l.total}`, plan.confirmed ? 'Assignment CONFIRMED by the response lead' : 'Assignment PROPOSED: waiting for the response lead to confirm'] }
             : { eid: c.eid, head: 'EMERGENCY — NO TASK ASSIGNED', tone: 'plain' as const, lines: [`${plan.patient.name.split(' ')[0]} · ${what}`, 'Remain available. Follow updates from CHIRON.', `Your status: ${l.state}${l.why ? ` (${l.why})` : ''}`] };
         (out[l.member.id] ??= []).push(entry);
       }
@@ -78,6 +79,7 @@ export function LinkPage({ mission, crew, links, kb, now, onProfile, account, on
               <span className={!l.connected ? 'text-[#f3c28d]' : l.eva || /EVA/.test(l.activity) ? 'text-[#f3c28d]' : 'text-[#7bd5b8]'}>{!l.connected ? 'Availability unknown' : l.eva ? 'Busy: on EVA' : /EVA/.test(l.activity) ? 'Busy: EVA preparation' : 'Available to help'}</span>
             </div>
             {<p className="mt-3 flex items-center gap-2 text-base text-marble/55"><Lock size={16} /> Readings are private: open {c.name.split(' ')[0]}’s profile to see them.{l.warnings.length > 0 && <span className="text-[#ff9c9c]"> A health warning is active.</span>}</p>}
+            <div className="mt-3"><CapsulePanel key={c.id} member={c} link={l} crew={crew} now={now} /></div>
             {l.connected && account === c.id && <div className="mt-3"><LinkFlow link={l} name={c.name} now={now} onProfile={() => onProfile(c.id)} /></div>}
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div>

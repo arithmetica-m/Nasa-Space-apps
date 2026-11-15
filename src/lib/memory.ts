@@ -49,6 +49,13 @@ export function missionMemory(log: ChironEvent[], mission: MissionId, checkIns: 
     if (e.type !== 'profile-access' || !mine(e.crewId)) continue;
     out.push({ t: e.t, kind: 'Access', who: name(e.by), title: `${name(e.by)} opened ${name(e.crewId)}’s medical profile`, detail: e.role === 'emergency' ? `emergency access: ${e.reason ?? 'no reason given'}` : 'medical officer access' });
   }
+  for (const e of log) {
+    if (e.type === 'capsule-entry' && mine(e.crewId)) out.push({ t: e.recordedAt, kind: 'Capsule', who: name(e.crewId), title: `Recorded on the band while offline: ${e.text}`, detail: `reconciled ${new Date(e.t).toISOString().slice(11, 16)} GMT` });
+    if (e.type === 'capsule-resolve' && mine(e.crewId)) out.push({ t: e.t, kind: 'Capsule', who: name(e.crewId), title: `${e.field} reconciled: kept ${e.kept === 'core' ? 'the CORE version' : 'the band version'}`, detail: e.by === 'chiron' ? 'automatic: only the band had changed' : `chosen by ${name(e.by)}` });
+    if (e.type === 'confirm-roles') { const c = casesFrom(log).find((x) => x.eid === e.eid); if (c && (!crewId || c.patientId === crewId)) out.push({ t: e.t, kind: 'Task', who: name(e.by), title: 'Assignments confirmed by the response lead', group: e.eid }); }
+    if ((e.type === 'alert-ack' || e.type === 'alert-review') && mine(e.crewId)) out.push({ t: e.t, kind: 'Alert', who: name(e.by), title: `LINK warning ${e.type === 'alert-ack' ? 'acknowledged' : 'reviewed by a medical officer'}`, detail: e.by === 'shared-dashboard' ? 'from the shared dashboard' : name(e.by) });
+    if ((e.type === 'baseline-proposal' || e.type === 'baseline') && mine(e.crewId)) out.push({ t: e.t, kind: 'Baseline', who: name(e.by), title: `${e.type === 'baseline' ? `Baseline v${e.version} approved` : 'Baseline change proposed'}: ${e.indicator} ${e.low}–${e.high}`, detail: e.reason });
+  }
   for (const r of practiceRecords()) {
     if (!mine(r.crewId)) continue;
     out.push({ t: r.t, kind: 'Training', who: name(r.crewId), title: `Practised: ${SKILLS.find((s) => s.id === r.skillId)?.name ?? r.skillId}`, detail: `score ${r.score}/${r.total}` });

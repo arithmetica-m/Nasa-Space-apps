@@ -108,7 +108,9 @@ export const INTRO_VIEW = { pos: new THREE.Vector3(-0.9, 0.35, 3.1), look: new T
 
 export function selectView(aspect = 16 / 9) {
   const look = new THREE.Vector3(11.5, 2.4, -4);
-  return { pos: look.clone().add(new THREE.Vector3(-0.5, 9, 27).multiplyScalar(widthFactor(aspect))), look };
+  // Tall, narrow screens (phones) step back further so Earth and Mars both stay in view.
+  const factor = widthFactor(aspect) * (aspect < 1 ? 1.35 : 1);
+  return { pos: look.clone().add(new THREE.Vector3(-0.5, 9, 27).multiplyScalar(factor)), look };
 }
 
 // Where each mission's label sits in the mission choice: below its planet or route.

@@ -12,7 +12,7 @@ export function DemoPage({ mission, onAction }: { mission: Mission; onAction: (a
       text: far
         ? `Ana Rocha is the medical officer on ${mission.name}, day ${mission.today}. Earth is ${mission.delayLabel} away each way, there is no evacuation, and the crew is four people. If something goes wrong, the crew must act before Earth can answer.`
         : `Ana Rocha is the medical officer on ${mission.name}. Earth is close today, but on a Mars mission it would be up to 22 minutes away each way. Switch the mission to Mars Transit in settings to see CHIRON change its advice.` },
-    { n: 2, title: 'THE PREPARATION', action: 'prepare', button: 'OPEN PREVENT', show: 'MEDICAL SYSTEM → PREVENT',
+    { n: 2, title: 'THE PREPARATION', action: 'prepare', button: 'OPEN TRAIN', show: 'MEDICAL SYSTEM → TRAIN → PREPARE',
       text: 'CHIRON knows each astronaut’s normal and plays every emergency through with this mission’s protocols, equipment and crew. Each gap becomes an action: “Ana last practised this 130 days ago → practise it now.”' },
     { n: 3, title: 'THE MONITORING', action: 'monitor', button: 'SEND A LOW OXYGEN READING FROM ANA’S BAND', show: 'CORE home: LINK warning',
       text: 'Ana’s CHIRON LINK band measures blood oxygen 89%. The reading travels to CORE, breaks the warning rule (below 94%), and every device shows a LINK WARNING. Her status becomes MEDICAL ATTENTION.' },

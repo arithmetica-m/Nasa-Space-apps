@@ -7,6 +7,7 @@ import { ago, type LinkStatus } from '../link/link';
 import { phaseOf, whereIs } from './MissionTimeline';
 import { MissionDial } from './SystemMap';
 import { Avatar } from './Avatar';
+import { AlertCard } from './AlertCard';
 
 export type Page = 'home' | 'profile' | 'train' | 'respond' | 'link' | 'roadmap' | 'nasa' | 'demo' | 'medical' | 'mission';
 export type MedicalPart = 'prevent' | 'train' | 'respond' | 'recover';
@@ -105,7 +106,7 @@ export function CoreHeader(p: HeaderProps) {
           </div>
         </div>
       </div>
-      <nav aria-label="Main sections" className="mt-2 flex gap-1 overflow-x-auto border-b border-marble/10">
+      <nav aria-label="Main sections" className="mt-2 flex flex-wrap gap-x-1 border-b border-marble/10">
         {([
           ['DASHBOARD', p.page === 'home', p.onHome],
           ['MY PROFILE', p.page === 'profile' && p.ownProfile, p.onMyProfile],
@@ -179,14 +180,7 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
       </section>
 
       {bands.flatMap((b) => b.warnings.map((w) => ({ b, w }))).map(({ b, w }) => (
-        <button key={b.crewId + w.key} type="button" onClick={() => onProfile(b.crewId)} role="alert"
-          className="flex min-h-16 w-full flex-wrap items-center justify-between gap-3 border-2 border-[#e45b5b] bg-[#e45b5b]/15 px-5 py-2 text-left backdrop-blur-md hover:bg-[#e45b5b]/25">
-          <span>
-            <span className="block font-mono text-xs tracking-[0.2em] text-[#ff8585]"><Watch size={14} className="mr-1 inline" /> LINK WARNING · {ago(w.t, now).toUpperCase()}</span>
-            <span className="block text-lg text-marble">{crew.find((c) => c.id === b.crewId)?.name} needs a check</span>
-          </span>
-          <span className="font-mono text-xs tracking-[0.2em] text-[#ff8585]">OPEN PROFILE</span>
-        </button>
+        <AlertCard key={b.crewId + w.key + w.t} band={b} w={w} crew={crew} links={links} now={now} onProfile={() => onProfile(b.crewId)} />
       ))}
 
       {!account && <p role="status" className="border border-gold/40 bg-void/80 p-4 text-marble">Shared mission tools and emergency response are available now. Choose your crew profile and enter your PIN for personal health features.</p>}

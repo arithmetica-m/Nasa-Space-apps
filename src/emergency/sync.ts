@@ -37,9 +37,14 @@ channel?.addEventListener('message', (m) => merge(m.data as ChironEvent[]));
 
 // Retries back off from 5 s to 1 minute while no relay is running.
 let retry = 5000;
+// The relay is for devices on one local network (npm run relay). A hosted HTTPS site cannot reach it,
+// so it is skipped there unless a secure relay address is configured (VITE_CHIRON_RELAY=wss://…).
+const relayUrl: string | undefined = typeof location === 'undefined' ? undefined
+  : (import.meta.env.VITE_CHIRON_RELAY as string | undefined) ?? (location.protocol === 'http:' ? `ws://${location.hostname}:${RELAY_PORT}` : undefined);
 function connect() {
+  if (!relayUrl) return;
   try {
-    socket = new WebSocket(`ws://${location.hostname}:${RELAY_PORT}`);
+    socket = new WebSocket(relayUrl);
   } catch { return; }
   socket.onopen = () => { retry = 5000; status = 'relay'; socket!.send(JSON.stringify(log)); emit(); };
   socket.onmessage = (m) => { try { merge(JSON.parse(m.data)); } catch { /* ignore */ } };

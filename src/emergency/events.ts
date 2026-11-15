@@ -21,7 +21,7 @@ export type ChironEvent = Base & (
   | { type: 'medical-access'; eid: string; patientId: string; reason: string }
   | { type: 'end'; eid: string }
   // A new version of a medical library entry, released by Mission Control. Crew devices cannot send this.
-  | { type: 'library'; entry: LibraryEntry; note: string }
+  | { type: 'library'; entry: LibraryEntry; note: string; sig?: string }
   // A measurement recorded during an emergency (by hand, or taken from the patient's LINK wearable).
   | { type: 'measure'; eid: string; key: string; value: string; source: 'manual' | 'link' | 'device' }
   // The crew changed who does a role (CHIRON's suggestion is only a suggestion).
@@ -33,6 +33,19 @@ export type ChironEvent = Base & (
   | { type: 'link-reading'; crewId: string; key: 'hr' | 'spo2' | 'skin' | 'activity'; value: number }
   // Back to the band's normal simulated readings.
   | { type: 'link-clear'; crewId: string }
+  // The response lead confirms CHIRON's proposed assignments (a snapshot of who does which role).
+  | { type: 'confirm-roles'; eid: string; roles: Partial<Record<RoleId, string>>; lead?: string }
+  // Alert lifecycle: someone saw it (acknowledged), a medical officer reviewed it.
+  | { type: 'alert-ack'; alertId: string; crewId: string }
+  | { type: 'alert-review'; alertId: string; crewId: string; note: string }
+  // Personal baselines: a medical officer proposes a change, Mission Control approves it as a new version.
+  | { type: 'baseline-proposal'; crewId: string; indicator: string; low: number; high: number; reason: string }
+  | { type: 'baseline'; crewId: string; indicator: string; low: number; high: number; version: number; reason: string; proposalId?: string }
+  // Medical State Capsule: an entry recorded on the band while offline, and a resolved conflict.
+  // A band connected or disconnected (simulated).
+  | { type: 'band'; crewId: string; connected: boolean }
+  | { type: 'capsule-entry'; crewId: string; entryId: string; text: string; recordedAt: number }
+  | { type: 'capsule-resolve'; crewId: string; field: string; kept: 'core' | 'capsule'; value: string[] }
   // Someone other than the owner opened a medical profile (medical officer, or logged emergency access).
   | { type: 'profile-access'; crewId: string; role: 'medical' | 'emergency'; reason?: string }
 );

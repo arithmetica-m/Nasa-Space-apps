@@ -21,11 +21,11 @@ crew.push(...loadExtraCrew().filter((m) => !crew.some((c) => c.id === m.id)));
 
 
 const base: Omit<InventoryItem, 'log'>[] = [
-  { id: 'o2-mask', name: 'Oxygen mask set', category: 'protective', quantity: 3, location: 'Medical bay, drawer M2', status: 'available' },
+  { id: 'o2-mask', name: 'Oxygen mask set', category: 'protective', quantity: 3, location: 'Medical bay, drawer M2', maintenanceDue: '2026-12-01', status: 'available' },
   { id: 'pba', name: 'Portable breathing apparatus', category: 'protective', quantity: 4, location: 'Beside each module hatch', status: 'available' },
-  { id: 'pulse-ox', name: 'Pulse oximeter', category: 'diagnostic', quantity: 2, location: 'Medical bay, kit A', status: 'available' },
-  { id: 'bp-monitor', name: 'Blood pressure monitor', category: 'diagnostic', quantity: 1, location: 'Medical bay, wall mount', status: 'available' },
-  { id: 'ecg', name: 'ECG unit', category: 'diagnostic', quantity: 1, location: 'Medical bay, cabinet M1', status: 'available' },
+  { id: 'pulse-ox', name: 'Pulse oximeter', category: 'diagnostic', quantity: 2, location: 'Medical bay, kit A', maintenanceDue: '2026-11-01', status: 'available' },
+  { id: 'bp-monitor', name: 'Blood pressure monitor', category: 'diagnostic', quantity: 1, location: 'Medical bay, wall mount', maintenanceDue: '2027-01-15', status: 'available' },
+  { id: 'ecg', name: 'ECG unit', category: 'diagnostic', quantity: 1, location: 'Medical bay, cabinet M1', maintenanceDue: '2026-10-01', status: 'available' },
   { id: 'anaph-kit', name: 'Anaphylaxis kit (contents per mission formulary)', category: 'medication', quantity: 2, location: 'Medical bay, drawer M1', expires: '2027-06-30', storage: 'Room temperature, away from light', status: 'available' },
   { id: 'restraint', name: 'Patient restraint board', category: 'equipment', quantity: 1, location: 'Medical bay, wall stowage', status: 'available' },
   { id: 'pressure', name: 'Suit and airlock pressurisation (treatment capability)', category: 'equipment', quantity: 1, location: 'Airlock', status: 'available' },

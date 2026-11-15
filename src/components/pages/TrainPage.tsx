@@ -5,6 +5,7 @@ import { indicators } from '../../data/indicators';
 import { outsideness } from '../../data/simulate';
 import { latestValue } from '../../lib/health';
 import { readiness } from '../../prevent/readiness';
+import { useLog } from '../../emergency/sync';
 import type { CrewMember, Procedure } from '../../emergency/types';
 import { procedures as guides } from '../../data/procedures';
 import { buildQuiz, SCENARIOS, SKILLS, savePractice, skillStatus } from '../../train/training';
@@ -37,7 +38,8 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
   const [version, setVersion] = useState(0);            // refresh after a practice is saved
   const me = crew.find((c) => c.id === account);
   const mine = useMemo(() => account ? skillStatus(account, mission.id) : [], [account, mission.id, version]);
-  const sim = useMemo(() => readiness(kb, mission.id), [kb, mission.id, version]);
+  const log = useLog();
+  const sim = useMemo(() => readiness(kb, mission.id, log), [kb, mission.id, version, log]);
   // Any approved protocol can be practised, even one not needed on this mission.
   const approved = (cat: string) => kb.find((p) => p.category === cat && p.status === 'approved' && p.steps.length);
   const next = mission.milestones.find((m) => m.day > mission.today && m.day - mission.today <= 60);
@@ -69,7 +71,11 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
         </Panel>
       )}
 
-      <Panel title="IS THE CREW READY FOR AN EMERGENCY?" tag="SIMULATION (LEVEL 2)">
+
+      </>}
+
+      {focus === 'train' && <>
+      <Panel title="PREPARE · IS THE CREW READY FOR AN EMERGENCY?" tag="SIMULATION (LEVEL 2)">
         <div className="grid gap-3 md:grid-cols-2">
           {sim.map((s) => {
             const canPractise = !!approved(s.category);
@@ -101,10 +107,7 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
           })}
         </div>
       </Panel>
-
-      </>}
-
-      {focus === 'train' && <>
+      <p className="text-sm text-marble/55">Practice keeps skills current. It does not authorise anyone to do a procedure: authorisation comes from the mission medical team.</p>
       {me && <Panel title={`YOUR REFRESHERS, ${me.name.split(' ')[0].toUpperCase()}`}>
         <ul className="space-y-2">
           {mine.filter((s) => s.due).slice(0, 3).map((s) => (

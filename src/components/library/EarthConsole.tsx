@@ -1,3 +1,6 @@
+import { BaselineApprovals } from '../BaselinePanel';
+import { crew } from '../../emergency/data';
+import { signUpdate } from '../../library/integrity';
 import { useState } from 'react';
 import { Satellite, Send } from 'lucide-react';
 import { publish } from '../../emergency/sync';
@@ -31,7 +34,8 @@ export function EarthConsole() {
       updated: new Date().toISOString().slice(0, 10),
       approvedBy: 'Mission Control medical team (simulated)',
     };
-    publish({ type: 'library', by: 'earth', entry: updated, note: note.trim() || 'Updated by Mission Control' });
+    const n = note.trim() || 'Updated by Mission Control';
+    publish({ type: 'library', by: 'earth', entry: updated, note: n, sig: signUpdate(updated, n) });
     setSent(`Version ${updated.version} sent to the crew. It replaces the old version on every crew device, and the old one stays in the record.`);
     setNote('');
   };
@@ -44,7 +48,14 @@ export function EarthConsole() {
           <h1 className="font-serif text-2xl tracking-[0.2em]">MISSION CONTROL · MEDICAL LIBRARY</h1>
           <p className="text-sm text-marble/60">Earth only. Changes are released as new versions to every crew device. Prototype: no real sign-in.</p>
         </div>
+        <a href="/" className="flex min-h-12 items-center border-2 border-gold/70 px-5 font-mono text-xs tracking-[0.18em] text-gold hover:bg-gold/10">OPEN THE CREW APP (MISSION SELECTION)</a>
       </header>
+
+      <section className="mt-6 border border-[#8fb8ff]/30 p-4" aria-label="Baseline changes waiting for approval">
+        <h2 className="font-serif text-lg tracking-[0.15em]">PERSONAL BASELINE CHANGES</h2>
+        <p className="mb-2 text-sm text-marble/60">Proposed by a medical officer on board. Approving creates a new version; older versions are kept.</p>
+        <BaselineApprovals crew={crew} />
+      </section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[280px_1fr]">
         <nav aria-label="Library entries">
