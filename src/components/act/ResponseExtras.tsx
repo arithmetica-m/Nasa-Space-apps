@@ -42,29 +42,29 @@ export function Measurements({ eid, account, states, patientLink, now }: { eid: 
     setDraft((d) => ({ ...d, [key]: '' }));
   };
   return (
-    <section className="mt-5 border border-marble/15 bg-[#101721] p-4" aria-labelledby="measure-title">
+    <section className="border border-marble/15 bg-[#101721] p-4" aria-labelledby="measure-title">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="measure-title" className="flex items-center gap-2 font-mono text-xs tracking-[0.2em] text-marble/70"><ClipboardList size={16} /> MEASUREMENTS FOR THE MEDICAL TEAM</h2>
+        <h2 id="measure-title" className="flex items-center gap-2 font-mono text-xs tracking-[0.2em] text-marble/70"><ClipboardList size={16} /> MEASUREMENTS</h2>
         <span className={`font-mono text-xs tracking-[0.15em] ${missing ? 'text-[#f3c28d]' : 'text-[#7bd5b8]'}`}>{missing ? `${missing} STILL NEEDED` : 'ALL COLLECTED'}</span>
       </div>
       {patientLink && !patientLink.connected && <p className="mt-2 text-sm text-[#f3c28d]"><Watch size={14} className="mr-1 inline" />The patient’s LINK band is offline ({ago(patientLink.lastSync, now)}). Take every reading by hand.</p>}
       <ul className="mt-3 divide-y divide-marble/10">
         {states.map((s) => (
           <li key={s.m.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2.5">
-            <span className="min-w-[200px] flex-1 text-base text-marble">{s.m.label}</span>
+            <span className="min-w-[200px] flex-1 text-xl text-marble">{s.m.label}</span>
             {s.value !== undefined ? (
               <span className="text-right">
-                <span className="text-base text-marble">{s.value}</span>
+                <span className="text-xl text-marble">{s.value}</span>
                 <span className="block text-xs text-marble/50">{s.source}{s.t ? ` · ${hm(s.t)}` : ''}</span>
-                {s.live && <button type="button" onClick={() => record(s.m.key, s.value!, 'link')} className="font-mono text-[10px] tracking-[0.15em] text-gold">ADD TO RECORD</button>}
+                {s.live && <button type="button" onClick={() => record(s.m.key, s.value!, 'link')} className="mt-1 min-h-12 border-2 border-gold/70 px-4 text-base font-semibold text-gold">SAVE TO THE RECORD</button>}
               </span>
             ) : (
               <span className="flex items-center gap-2">
                 <span className="font-mono text-xs tracking-[0.15em] text-[#f3c28d]">NEEDED</span>
                 <input value={draft[s.m.key] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, [s.m.key]: e.target.value }))}
                   onKeyDown={(e) => e.key === 'Enter' && record(s.m.key, draft[s.m.key] ?? '', 'manual')}
-                  placeholder={s.m.unit ?? 'type it'} aria-label={s.m.label} className="min-h-11 w-32 border border-marble/25 bg-transparent px-2 text-base text-marble" />
-                <button type="button" onClick={() => record(s.m.key, draft[s.m.key] ?? '', 'manual')} className="min-h-11 border border-gold/60 px-3 font-mono text-xs tracking-[0.15em] text-gold">RECORD</button>
+                  placeholder={s.m.unit ?? 'type it'} aria-label={s.m.label} className="min-h-14 w-36 border-2 border-marble/30 bg-transparent px-3 text-xl text-marble" />
+                <button type="button" onClick={() => record(s.m.key, draft[s.m.key] ?? '', 'manual')} className="min-h-14 border-2 border-gold/70 px-5 text-lg font-semibold text-gold">SAVE</button>
               </span>
             )}
           </li>

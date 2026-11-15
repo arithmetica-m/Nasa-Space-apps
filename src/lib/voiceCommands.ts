@@ -13,6 +13,34 @@ export type VoiceCommand =
   | { type: 'silence' }
   | { type: 'unknown' };
 
+// What can be said during an emergency. Short words, so they work when hands are busy.
+export const EMERGENCY_VOICE_EVENT = 'chiron-emergency-voice';
+export interface EmergencyVoice {
+  action?: 'next' | 'yes' | 'no' | 'cannot' | 'repeat' | 'confirm' | 'worse' | 'better';
+  patientId?: string;
+  category?: 'dcs' | 'respiratory' | 'anaphylaxis' | 'behavioral';
+}
+export function parseEmergency(text: string, crew: { id: string; name: string }[]): EmergencyVoice {
+  const t = clean(text);
+  const has = (re: RegExp) => re.test(t);
+  const out: EmergencyVoice = {};
+  const words = t.split(' ');
+  out.patientId = crew.find((c) => clean(c.name).split(' ').some((n) => n.length > 2 && words.includes(n)))?.id;
+  if (has(/\b(breath\w*|air|oxygen|chok\w*|suffocat\w*)\b/)) out.category = 'respiratory';
+  else if (has(/\b(allerg\w*|swell\w*|anaphyla\w*|rash)\b/)) out.category = 'anaphylaxis';
+  else if (has(/\b(decompression|bends|eva|joint pain)\b/)) out.category = 'dcs';
+  else if (has(/\b(panic\w*|distress\w*|anxi\w*|psycholog\w*)\b/)) out.category = 'behavioral';
+  if (has(/\b(can ?not|cant|can t|unable|skip)\b/)) out.action = 'cannot';
+  else if (has(/\b(repeat|again|read( it| that| step)?|what (is|was) (the|my) step)\b/)) out.action = 'repeat';
+  else if (has(/\b(confirm\w*)\b/)) out.action = 'confirm';
+  else if (has(/\b(worse)\b/)) out.action = 'worse';
+  else if (has(/\b(better)\b/)) out.action = 'better';
+  else if (has(/\b(yes|yeah|yep|affirmative|correct)\b/)) out.action = 'yes';
+  else if (has(/\b(no|nope|negative)\b/)) out.action = 'no';
+  else if (has(/\b(done|next( step)?|step done|continue|finished|complete\w*|ok(ay)?)\b/)) out.action = 'next';
+  return out;
+}
+
 export const VOICE_HELP = 'Try: “crew status”, “my profile”, “Ana’s profile”, “check in”, “procedures”, “equipment”, “next step” or “emergency”.';
 
 const clean = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BellOff, Siren, Volume2, X } from 'lucide-react';
 import type { MissionId } from '../types';
-import { crew } from '../emergency/data';
-import { casesFrom } from '../emergency/plan';
+import { crew, procedures } from '../emergency/data';
+import { buildPlan, casesFrom, roleName, rolesOf } from '../emergency/plan';
+import { categoryText } from '../emergency/report';
 import { useLog } from '../emergency/sync';
 import { speak } from './VoiceControl';
 
@@ -27,9 +28,7 @@ export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJo
     const newCases = cases.filter((item) => !announced.current.has(item.eid));
     for (const item of newCases) {
       announced.current.add(item.eid);
-      speak(item.category === 'behavioral'
-        ? 'Crew support requested. Open emergency response.'
-        : 'Medical emergency reported. Open emergency response.');
+      speak(`Emergency. ${patientName(item.patientId).split(' ')[0]} needs help. Say emergency to open it.`);
     }
   }, [cases]);
 
@@ -74,6 +73,15 @@ export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJo
   const acknowledge = (eid: string) => setAcknowledged((previous) => new Set(previous).add(eid));
   const silence = (eid: string) => setSilenced((previous) => new Set(previous).add(eid));
   const patientName = (id: string) => crew.find((member) => member.id === id)?.name ?? 'Crew member';
+  // What this person is asked to do in the newest emergency.
+  const myPart = (() => {
+    if (!newest) return '';
+    if (newest.patientId === account) return 'Your crew is coming to help you.';
+    const all = casesFrom(log);
+    const plan = buildPlan(newest, procedures, log, all);
+    const roles = rolesOf(plan.roles, account);
+    return roles.length ? `You are: ${roles.map((r) => roleName[r]).join(' and ')}.` : 'No task for you yet. Stay close.';
+  })();
 
   return (
     <>
@@ -81,37 +89,33 @@ export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJo
         <div key={item.eid} className="fixed inset-x-3 bottom-20 z-[45] mx-auto flex max-w-3xl items-center gap-3 border border-[#ff7070]/60 bg-[#160c10]/95 px-4 py-3 shadow-xl backdrop-blur">
           <Siren size={18} className="shrink-0 animate-pulse text-[#ff8585]" />
           <div className="mr-auto min-w-0">
-            <div className="font-mono text-[10px] tracking-[0.16em] text-[#ff8585]">EMERGENCY ACTIVE · ACKNOWLEDGED</div>
-            <div className="truncate text-sm text-marble">{patientName(item.patientId)} · Crew support active</div>
+            <div className="truncate text-lg text-marble">Emergency: {patientName(item.patientId).split(' ')[0]} needs help</div>
           </div>
-          <button type="button" onClick={() => onJoin(item.eid)} className="min-h-11 bg-[#e45b5b] px-4 font-mono text-[10px] font-semibold tracking-wider text-[#120709] hover:bg-[#ff8585]">OPEN RESPONSE</button>
+          <button type="button" onClick={() => onJoin(item.eid)} className="min-h-14 bg-[#e45b5b] px-6 text-lg font-bold text-[#120709] hover:bg-[#ff8585]">OPEN</button>
         </div>
       ))}
 
       {newest && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#020408]/80 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="emergency-alert-title">
-          <section className="w-full max-w-xl border-2 bg-[#100c10] p-5 shadow-[0_0_70px_rgba(228,91,91,0.22)] md:p-7" style={{ borderColor: severity(newest.category).color }}>
-            <div className="flex items-start gap-4">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border" style={{ color: severity(newest.category).color, borderColor: `${severity(newest.category).color}99`, backgroundColor: `${severity(newest.category).color}18` }}><Siren size={24} className="animate-pulse" /></span>
-              <div className="mr-auto">
-                <div className="font-mono text-[10px] font-semibold tracking-[0.22em]" style={{ color: severity(newest.category).color }}>{severity(newest.category).name} · {cases.length > 1 ? `${cases.length} ACTIVE` : 'ACTIVE'}</div>
-                <h2 id="emergency-alert-title" className="mt-1 font-sans text-2xl font-semibold text-marble">Crew support is needed</h2>
-                <p className="mt-2 text-base text-marble/80">{patientName(newest.patientId)} <span className="text-marble/45">·</span> Response team notified</p>
-                <p className="mt-1 text-sm text-marble/55">Private health details are available only in the response view.</p>
-              </div>
-              <button type="button" onClick={() => acknowledge(newest.eid)} aria-label="Acknowledge emergency alert" className="rounded p-2 text-marble/55 hover:bg-marble/10 hover:text-marble"><X size={20} /></button>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#020408]/85 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="emergency-alert-title">
+          <section className="w-full max-w-2xl border-4 bg-[#140a0c] p-5 shadow-[0_0_70px_rgba(228,91,91,0.3)] md:p-8" style={{ borderColor: severity(newest.category).color }}>
+            <div className="flex items-center gap-3 text-lg font-semibold tracking-wide" style={{ color: severity(newest.category).color }}>
+              <Siren size={30} className="animate-pulse" /> EMERGENCY{cases.length > 1 ? ` · ${cases.length} ACTIVE` : ''}
             </div>
-            {audioError && <p className="mt-4 text-xs text-[#e39b4b]">Audio alarm unavailable in this browser. The visual alert remains active.</p>}
-            <div className="mt-6 flex flex-wrap justify-end gap-3">
-              <button type="button" onClick={() => silence(newest.eid)} className="flex min-h-12 items-center gap-2 border border-marble/25 px-4 text-sm text-marble/80 hover:border-marble/50">
-                {silenced.has(newest.eid) ? <BellOff size={16} /> : <Volume2 size={16} />}
-                {silenced.has(newest.eid) ? 'Alarm silenced' : 'Silence alarm'}
+            <h2 id="emergency-alert-title" className="mt-3 text-4xl font-semibold leading-tight text-marble md:text-5xl">{patientName(newest.patientId).split(' ')[0]} needs help</h2>
+            <p className="mt-2 text-2xl text-marble/85">{newest.category === 'behavioral' ? 'Crew support requested' : categoryText[newest.category]}</p>
+            <p className="mt-3 border-l-4 border-gold bg-gold/10 px-4 py-3 text-2xl text-marble">{myPart}</p>
+            {audioError && <p className="mt-3 text-base text-[#e39b4b]">No alarm sound in this browser.</p>}
+            <button type="button" onClick={() => { acknowledge(newest.eid); onJoin(newest.eid); }} className="mt-5 min-h-24 w-full text-3xl font-bold text-[#130709]" style={{ backgroundColor: severity(newest.category).color }}>
+              {newest.patientId === account ? 'OPEN' : 'GO TO MY TASK'}
+            </button>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => silence(newest.eid)} className="flex min-h-16 items-center justify-center gap-2 border-2 border-marble/25 px-4 text-lg text-marble/85 hover:border-marble/50">
+                {silenced.has(newest.eid) ? <BellOff size={20} /> : <Volume2 size={20} />}
+                {silenced.has(newest.eid) ? 'Alarm off' : 'Alarm off'}
               </button>
-              <button type="button" onClick={() => { acknowledge(newest.eid); onJoin(newest.eid); }} className="min-h-12 px-5 font-mono text-xs font-semibold tracking-[0.14em] text-[#130709]" style={{ backgroundColor: severity(newest.category).color }}>
-                OPEN EMERGENCY RESPONSE
-              </button>
+              <button type="button" onClick={() => acknowledge(newest.eid)} className="flex min-h-16 items-center justify-center gap-2 border-2 border-marble/25 px-4 text-lg text-marble/85 hover:border-marble/50"><X size={20} /> Not now</button>
             </div>
-            <p className="mt-4 text-right font-mono text-[9px] tracking-[0.1em] text-marble/40">Alert remains visible until acknowledged or resolved.</p>
+            <p className="mt-3 text-center text-base text-marble/50">Voice: say “emergency” to open it.</p>
           </section>
         </div>
       )}

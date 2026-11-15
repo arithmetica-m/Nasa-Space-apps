@@ -6,7 +6,7 @@ import { missions } from './data/missions';
 import { buildMarks } from './data/simulate';
 import { crewHealth, recordsFor, type CrewHealth } from './lib/crewHealth';
 import { SignIn } from './components/SignIn';
-import { parseCommand } from './lib/voiceCommands';
+import { EMERGENCY_VOICE_EVENT, parseEmergency, parseCommand } from './lib/voiceCommands';
 import type { Procedure } from './data/procedures';
 import { Earth, Mars, Moon, SUN_DIR } from './three/Planets';
 import { CameraRig } from './three/CameraRig';
@@ -136,8 +136,25 @@ export default function App() {
   const voice = useVoiceControl((text) => {
     const cmd = parseCommand(text, crew);
     const nameOf = (id: string) => crew.find((m) => m.id === id)?.name ?? 'crew member';
+    // Inside emergency mode, short words drive the response: done, yes, no, can't, repeat.
+    if (mode === 'act' && cmd.type !== 'silence') {
+      const ev = parseEmergency(text, crew);
+      if (ev.action || ev.category || ev.patientId) window.dispatchEvent(new CustomEvent(EMERGENCY_VOICE_EVENT, { detail: ev }));
+      else speak('Say done, yes, no, can not, or repeat.');
+      return;
+    }
     switch (cmd.type) {
-      case 'emergency': setVoiceConfirm(true); speak('Confirm on screen to open emergency response.'); break;
+      // Saying "emergency" opens emergency mode at once. Naming a person or the problem fills those in.
+      case 'emergency': {
+        const ev = parseEmergency(text, crew);
+        // An emergency is already running and nothing new was named: open that one.
+        const running = activeCases[activeCases.length - 1];
+        if (running && !ev.patientId && !ev.category) { joinAct(running.eid); speak('Opening the emergency.'); break; }
+        openAct('Started by voice', ev.patientId);
+        speak(ev.category ? 'Emergency mode.' : 'Emergency mode. Who needs help, and what is happening?');
+        if (ev.category) setTimeout(() => window.dispatchEvent(new CustomEvent(EMERGENCY_VOICE_EVENT, { detail: ev })), 400);
+        break;
+      }
       case 'next':
         if (mode === 'act' || mode === 'teach') window.dispatchEvent(new Event(NEXT_STEP_EVENT));
         else speak('Open a procedure or an emergency first.');
@@ -357,7 +374,8 @@ export default function App() {
 
       {/* ACT: takes over in an emergency */}
       {phase === 'mission' && mission && mode === 'act' && (
-        <Act mission={mission} reason={actReason} kb={kb} account={account} joinEid={joinEid} patient={actPatient} onLeave={leaveAct} />
+        <Act key={joinEid ?? "new"} mission={mission} reason={actReason} kb={kb} account={account} joinEid={joinEid} patient={actPatient} onLeave={leaveAct}
+          listening={voice.listening} voiceSupported={voice.supported} onVoice={voice.toggle} />
       )}
 
       {libraryOpen && mission && (
