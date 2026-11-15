@@ -14,9 +14,9 @@ npm install
 npm run dev
 ```
 
-Open the address Vite prints. Choose a mission (try **Mars Transit**) and who uses the device. Then open **▶ DEMONSTRATION** at the bottom of the home screen. Profiles ask for a PIN (see Privacy below).
+Open the address Vite prints. Choose a mission (try **Mars Transit**) to go directly to the crew dashboard. The dashboard starts signed out. Emergency response, mission information, the medical library, general training, CHIRON LINK status and the demonstration work without signing in. Choose your crew profile and enter its PIN to unlock your personal health features (see Privacy below). Open **▶ DEMONSTRATION** at the bottom of the home screen for a walkthrough. Use **LOG OUT** to return to the shared dashboard so another crew member can sign in. Reloading also starts signed out.
 
-To see several crew devices working together, open a second browser tab and switch it to another crew member in settings (⚙). On separate devices on one network:
+To see several crew devices working together, open a second browser tab and sign in to another crew member’s profile. On separate devices on one network:
 
 ```bash
 npm run relay
@@ -25,7 +25,7 @@ npm run dev -- --host
 
 ## Privacy: one shared dashboard, protected profiles
 
-The crew dashboard shows only each person's general status, CHIRON LINK connection and alert count. Medical details live in each astronaut's own profile. A profile locks again every time it is closed, so it asks for that astronaut's PIN on every visit.
+The crew dashboard shows only each person's general status, CHIRON LINK connection and alert count. Medical details live in each astronaut's own profile. Selecting a profile and entering the correct PIN starts a session for that astronaut and unlocks their personal health features. Returning to the dashboard keeps the session active; **LOG OUT** clears it and locks personal features for the next user. Shared tools and emergency response remain available. The owner’s profile stays unlocked during their session; other profiles retain their access checks.
 
 | Way in | Who | Logged? |
 | --- | --- | --- |
@@ -61,6 +61,8 @@ Press **EMERGENCY MODE** on any screen, or turn on the microphone and say **"eme
 - **Procedure:** which step the crew is on, who is doing it, and what comes next. Your own step has big DONE / YES / NO buttons and is read aloud.
 - **Live updates:** observations, completed steps, role changes and Earth's replies, newest first, each with a time.
 - **VIEW CREW ASSIGNMENTS** (always visible): each assigned person's role, responsibility and status (NOT STARTED / IN PROGRESS / COMPLETED), plus who is AVAILABLE or UNAVAILABLE. Tapping a person opens their instructions.
+
+**END EMERGENCY** is always available at the top of the patient and crew-assignment screens, including on the shared dashboard. Confirm to end that response on every device while keeping the medical log; **KEEP EMERGENCY ACTIVE** cancels. Exiting to the dashboard leaves the emergency running.
 
 Everyone is notified; only the people needed get a task. The CHIRON LINK page shows what each band displays: TASK ASSIGNED with the role, NO TASK ASSIGNED, or MEDICAL EMERGENCY ACTIVE for the patient. Voice works throughout: "done", "yes", "no", "can't", "repeat".
 

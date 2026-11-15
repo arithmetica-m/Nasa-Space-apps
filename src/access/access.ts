@@ -2,7 +2,7 @@ import type { CrewMember } from '../emergency/types';
 
 // WHO MAY SEE WHAT.
 // One shared dashboard shows only general status. Each astronaut's medical profile is protected
-// and locks again every time it is closed.
+// and requires a PIN to start a session. Logout clears that session.
 // PROTOTYPE: PINs are fixed demo values and checks run in the browser. This shows the access
 // model (personal PIN, medical officer access, logged emergency access); it is not real security.
 

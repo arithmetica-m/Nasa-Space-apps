@@ -56,6 +56,7 @@ const REASONS = ['They cannot answer for themselves', 'The medical officer asked
 export type OpenedAs = 'owner' | 'medical' | 'emergency';
 
 interface Props {
+  authenticatedOwner?: boolean;
   viewer: CrewMember;          // whose device this is (named in the log for emergency access)
   owner: CrewMember;           // whose profile it is
   crew: CrewMember[];
@@ -66,11 +67,16 @@ interface Props {
   children: (as: OpenedAs) => ReactNode;   // the full medical profile
 }
 
-// Stands in front of every medical profile. It locks again every time you leave the profile:
-// the astronaut's own PIN is needed on each visit. Two logged ways in exist for other people:
+// An authenticated owner can revisit their profile during the session.
+// Other profiles require access checks. Two logged ways in exist for other people:
 // a medical officer with their own PIN, and emergency access with a reason.
-export function ProfileGate({ viewer, owner, crew, health, link, now, onOpened, children }: Props) {
-  const [opened, setOpened] = useState<OpenedAs>();
+export function ProfileGate({ authenticatedOwner, viewer, owner, crew, health, link, now, onOpened, children }: Props) {
+  const [opened, setOpened] = useState<OpenedAs | undefined>(authenticatedOwner ? 'owner' : undefined);
+  useEffect(() => {
+    if (authenticatedOwner) onOpened?.('owner');
+    // Notify once when an already authenticated owner opens this profile.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticatedOwner]);
   const [way, setWay] = useState<'owner' | 'medical' | 'emergency'>('owner');
   const [officer, setOfficer] = useState<CrewMember>();
   const first = owner.name.split(' ')[0];

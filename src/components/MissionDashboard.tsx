@@ -30,7 +30,7 @@ interface HeaderProps {
   speaking: boolean;
   voiceSupported: boolean;
   onHome: () => void;
-  onAccount: (id: string) => void;
+  onLogout: () => void;
   onVoice: () => void;
   onStopSpeaking: () => void;
   onChangeMission: () => void;
@@ -73,6 +73,7 @@ export function CoreHeader(p: HeaderProps) {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {p.account && <button type="button" onClick={p.onLogout} className="min-h-11 border border-gold/40 px-3 text-xs text-gold">LOG OUT</button>}
           <button type="button" onClick={p.onLibrary} aria-label="Open the medical library"
             className="flex min-h-11 items-center gap-2 border border-marble/15 px-3 font-mono text-xs tracking-[0.15em] text-marble/70 hover:border-gold/60 hover:text-marble">
             <BookOpen size={18} /> <span className="hidden sm:inline">LIBRARY</span>
@@ -92,12 +93,8 @@ export function CoreHeader(p: HeaderProps) {
             </button>
             {menu && (
               <div className="absolute right-0 top-12 z-30 w-64 border border-marble/15 bg-void p-3 shadow-2xl">
-                <label htmlFor="crew-account" className="font-mono text-[10px] tracking-[0.2em] text-marble/50">THIS DEVICE BELONGS TO</label>
-                <select id="crew-account" value={p.account} onChange={(e) => p.onAccount(e.target.value)}
-                  className="mt-1 min-h-11 w-full border border-marble/20 bg-void px-2 text-sm text-marble">
-                  {p.crew.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-                <p className="mt-1 text-[11px] text-marble/40">Switching is for the demo only.</p>
+                <p className="text-sm text-marble/80">{p.account ? `Signed in as ${p.crew.find((m) => m.id === p.account)?.name}` : 'Shared dashboard · no profile signed in'}</p>
+                {p.account && <button type="button" onClick={() => { setMenu(false); p.onLogout(); }} className="mt-2 min-h-11 w-full border border-gold/50 text-gold">LOG OUT</button>}
                 <button type="button" onClick={() => { setMenu(false); p.onOpen('demo'); }} className="mt-3 min-h-11 w-full bg-gold/90 font-mono text-xs tracking-[0.18em] text-void hover:bg-gold">▶ DEMONSTRATION</button>
                 <button type="button" onClick={() => { setMenu(false); p.onRoadmap(); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">About CHIRON and roadmap</button>
                 <button type="button" onClick={() => { setMenu(false); p.onOpen('nasa'); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">NASA data in CHIRON</button>
@@ -116,8 +113,8 @@ export function CoreHeader(p: HeaderProps) {
           ['MEDICAL SYSTEM', p.page === 'medical' || p.page === 'train' || p.page === 'respond', () => p.onOpen('medical')],
           ['MISSION', p.page === 'mission', () => p.onOpen('mission')],
         ] as const).map(([label, active, go]) => (
-          <button key={label} type="button" onClick={go} aria-current={active ? 'page' : undefined}
-            className={`min-h-12 shrink-0 px-4 font-mono text-xs tracking-[0.18em] ${active ? 'border-b-2 border-gold text-gold' : 'text-marble/65 hover:text-marble'}`}>{label}</button>
+          <button key={label} type="button" onClick={go} disabled={!p.account && label === 'MY PROFILE'} title={!p.account && label === 'MY PROFILE' ? 'Choose your profile and enter your PIN to unlock' : undefined} aria-current={active ? 'page' : undefined}
+            className={`min-h-12 shrink-0 px-4 font-mono text-xs tracking-[0.18em] ${active ? 'border-b-2 border-gold text-gold' : 'text-marble/65 hover:text-marble'} disabled:opacity-40 disabled:cursor-not-allowed`}>{label}</button>
         ))}
       </nav>
     </header>
@@ -133,12 +130,12 @@ const PARTS: [MedicalPart, string, string, typeof Siren][] = [
   ['recover', 'RECOVER', 'Back to your normal', HeartPulse],
 ];
 
-export function MedicalTiles({ lines, onOpen }: { lines: Record<MedicalPart, string>; onOpen: (p: MedicalPart) => void }) {
+export function MedicalTiles({ lines, onOpen, signedIn = true }: { lines: Record<MedicalPart, string>; onOpen: (p: MedicalPart) => void; signedIn?: boolean }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {PARTS.map(([id, name, sub, Icon]) => (
-        <button key={id} type="button" onClick={() => onOpen(id)}
-          className={`flex min-h-[130px] flex-col border bg-void/75 p-4 text-left backdrop-blur-md hover:bg-void/90 ${id === 'respond' ? 'border-[#e45b5b]/40 hover:border-[#e45b5b]' : 'border-marble/10 hover:border-gold/60'}`}>
+        <button key={id} type="button" onClick={() => onOpen(id)} disabled={id === 'recover' && !signedIn} title={id === 'recover' && !signedIn ? 'Sign in to use your recovery plan' : undefined}
+          className={`flex min-h-[130px] flex-col border bg-void/75 p-4 text-left backdrop-blur-md hover:bg-void/90 disabled:opacity-40 disabled:cursor-not-allowed ${id === 'respond' ? 'border-[#e45b5b]/40 hover:border-[#e45b5b]' : 'border-marble/10 hover:border-gold/60'}`}>
           <Icon size={24} className={id === 'respond' ? 'text-[#ff8585]' : 'text-gold'} />
           <span className="mt-2 font-serif text-xl tracking-[0.2em] text-marble">{name}</span>
           <span className="text-sm text-marble/55">{sub}</span>
@@ -192,7 +189,8 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
         </button>
       ))}
 
-      {!checkedIn && (
+      {!account && <p role="status" className="border border-gold/40 bg-void/80 p-4 text-marble">Shared mission tools and emergency response are available now. Choose your crew profile and enter your PIN for personal health features.</p>}
+      {account && !checkedIn && (
         <button type="button" onClick={onCheckIn}
           className="flex min-h-16 w-full items-center justify-between gap-3 border border-gold/60 bg-gold/10 px-5 text-left backdrop-blur-md hover:bg-gold/20">
           <span className="text-lg text-marble">{crew.find((c) => c.id === account)?.name.split(' ')[0]}, your daily check-in is not done yet.</span>
@@ -251,7 +249,7 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
 
       <section aria-labelledby="help-title">
         <h2 id="help-title" className="mb-2 font-mono text-[11px] tracking-[0.25em] text-gold">MEDICAL SYSTEM</h2>
-        <MedicalTiles lines={tiles} onOpen={onMedical} />
+        <MedicalTiles lines={tiles} onOpen={onMedical} signedIn={!!account} />
       </section>
 
       <button type="button" onClick={() => onPage('mission')}

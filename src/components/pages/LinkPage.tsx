@@ -24,7 +24,6 @@ interface Props {
 
 // CHIRON LINK: every astronaut's wearable, and what travels between it and CHIRON CORE.
 export function LinkPage({ mission, crew, links, kb, now, onProfile, account, onJoin }: Props) {
-  void account;
   const log = useLog();
   // What each band shows during an emergency: the same assignment the emergency screen shows.
   const band = useMemo(() => {
@@ -79,7 +78,7 @@ export function LinkPage({ mission, crew, links, kb, now, onProfile, account, on
               <span className={!l.connected ? 'text-[#f3c28d]' : l.eva || /EVA/.test(l.activity) ? 'text-[#f3c28d]' : 'text-[#7bd5b8]'}>{!l.connected ? 'Availability unknown' : l.eva ? 'Busy: on EVA' : /EVA/.test(l.activity) ? 'Busy: EVA preparation' : 'Available to help'}</span>
             </div>
             {<p className="mt-3 flex items-center gap-2 text-base text-marble/55"><Lock size={16} /> Readings are private: open {c.name.split(' ')[0]}’s profile to see them.{l.warnings.length > 0 && <span className="text-[#ff9c9c]"> A health warning is active.</span>}</p>}
-            {l.connected && <div className="mt-3"><LinkFlow link={l} name={c.name} now={now} onProfile={() => onProfile(c.id)} /></div>}
+            {l.connected && account === c.id && <div className="mt-3"><LinkFlow link={l} name={c.name} now={now} onProfile={() => onProfile(c.id)} /></div>}
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div>
                 <div className="flex items-center gap-2 font-mono text-[11px] tracking-[0.2em] text-marble/50"><ArrowDownUp size={14} /> ON THIS BAND NOW</div>

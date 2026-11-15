@@ -35,11 +35,12 @@ interface Props {
 // EMERGENCY MODE: takes over the screen. Two taps start it: who, then what.
 // Starting an emergency sends it to every crew device.
 export function Act({ mission, reason, kb, account, joinEid, patient: initialPatient, onLeave, listening, voiceSupported, onVoice }: Props) {
-  const [patient, setPatient] = useState(initialPatient ?? account);
+  const [patient, setPatient] = useState(initialPatient ?? (account === 'shared-dashboard' ? '' : account));
   const [eid, setEid] = useState(joinEid);
   const [behavioral, setBehavioral] = useState(false);
 
   const start = (category: Category, who = patient) => {
+    if (!crew.some((member) => member.id === who)) { speak('Choose who needs help first.'); return; }
     if (category === 'behavioral') { setBehavioral(true); return; }
     const id = newId();
     const now = Date.now();

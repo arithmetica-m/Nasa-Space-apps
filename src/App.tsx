@@ -1,3 +1,4 @@
+import { MissionChooser } from './components/MissionChooser';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
@@ -5,7 +6,6 @@ import type { DayRecord, Mark, MissionId } from './types';
 import { missions } from './data/missions';
 import { buildMarks } from './data/simulate';
 import { crewHealth, recordsFor, type CrewHealth } from './lib/crewHealth';
-import { SignIn } from './components/SignIn';
 import { EMERGENCY_VOICE_EVENT, parseEmergency, parseCommand } from './lib/voiceCommands';
 import type { Procedure } from './data/procedures';
 import { Earth, Mars, Moon, SUN_DIR } from './three/Planets';
@@ -30,7 +30,7 @@ import { MedicalTiles, type MedicalPart } from './components/MissionDashboard';
 import { PageShell } from './components/pages/ui';
 import { readiness } from './prevent/readiness';
 import { plansFor } from './recover/recovery';
-import { ProfileGate } from './components/ProfileGate';
+import { PinPad, ProfileGate } from './components/ProfileGate';
 import { AddCrew } from './components/AddCrew';
 import { DemoPage, type DemoAction } from './components/pages/DemoPage';
 import { publish } from './emergency/sync';
@@ -81,7 +81,7 @@ function withCheckIn(sim: DayRecord[], ci?: TodayCheckIn): DayRecord[] {
   return [...sim.slice(0, -1), { ...last, logged: true, values: { ...last.values, ...ci.values } }];
 }
 
-// Setup (mission choice and sign-in) happens once per device and is remembered.
+// Mission choice is remembered; selecting a mission opens the crew dashboard.
 const MISSION_KEY = 'chiron-mission-v1';
 function savedMission(): MissionId | undefined {
   try {
@@ -147,11 +147,20 @@ export default function App() {
   const [pendingCheckIn, setPendingCheckIn] = useState(false); // open it once the PIN is entered
   const [addCrew, setAddCrew] = useState(false);
   const me = crew.find((m) => m.id === account) ?? crew[0];
-  const openProfile = (id: string) => { setSelectedProfile(id); setPage('profile'); setMode('watch'); };
+  const openProfile = (id: string) => { if (!id) { goHome(); return; } setSelectedProfile(id); setPage('profile'); setMode('watch'); };
   const goHome = () => { setPage('home'); setSelectedProfile(undefined); setMode('watch'); };
+
+  const logout = () => {
+    if (voice.listening) voice.toggle();
+    setAccount(''); goHome(); setCheckInOpen(false); setCheckInFor(undefined);
+    setPendingCheckIn(false); setLibraryOpen(false); setAddCrew(false); setVoiceConfirm(false); stopSpeaking();
+  };
 
   const voice = useVoiceControl((text) => {
     const cmd = parseCommand(text, crew);
+    if (!signedIn && (cmd.type === 'checkin' || (cmd.type === 'profile' && !cmd.crewId))) {
+      goHome(); speak('Choose your profile on the dashboard and enter your PIN for personal health features.'); return;
+    }
     const nameOf = (id: string) => crew.find((m) => m.id === id)?.name ?? 'crew member';
     // Inside emergency mode, short words drive the response: done, yes, no, can't, repeat.
     if (mode === 'act' && cmd.type !== 'silence') {
@@ -225,7 +234,6 @@ export default function App() {
     }
     return out;
   }, [recordsByCrew, activeCases, links]);
-  const memoryAll = useMemo(() => (chosen ? missionMemory(log, chosen, missionCheckIns) : []), [log, chosen, missionCheckIns]);
 
   // Overall medical system status, most important first.
   const status = useMemo<SystemStatus>(() => {
@@ -243,18 +251,19 @@ export default function App() {
   const [trainFocus, setTrainFocus] = useState<'prevent' | 'train'>('prevent');
   const tiles = useMemo<Record<MedicalPart, string>>(() => {
     if (!mission) return { prevent: '', train: '', respond: '', recover: '' };
-    const due = skillStatus(account, mission.id).filter((s) => s.due).length;
+    const due = signedIn ? skillStatus(account, mission.id).filter((s) => s.due).length : 0;
     const gaps = readiness(kb, mission.id).filter((r) => !r.ready).length;
     const todo = plansFor(account, recordsByCrew[account] ?? []).length;
     return {
       prevent: gaps ? `${gaps} emergencies need preparation` : 'Crew is prepared',
-      train: due ? `${due} refresher${due > 1 ? 's' : ''} due for you` : 'Your skills are up to date',
+      train: !signedIn ? 'Emergency practice and measurement guides' : due ? `${due} refresher${due > 1 ? 's' : ''} due for you` : 'Your skills are up to date',
       respond: activeCases.length ? `${activeCases.length} ACTIVE EMERGENCY` : status.label === 'CHECK STOCK' ? 'No emergencies · check stock' : 'No active emergencies',
-      recover: todo ? `${todo} reading${todo > 1 ? 's' : ''} to bring back to normal` : 'You are at your normal',
+      recover: !signedIn ? 'Sign in for your recovery plan' : todo ? `${todo} reading${todo > 1 ? 's' : ''} to bring back to normal` : 'You are at your normal',
     };
-  }, [mission, account, kb, recordsByCrew, activeCases, status]);
+  }, [mission, account, signedIn, kb, recordsByCrew, activeCases, status]);
   const openMedical = (part: MedicalPart) => {
     setMode('watch');
+    if (part === 'recover' && !signedIn) { goHome(); return; }
     if (part === 'respond') setPage('respond');
     else if (part === 'recover') openProfile(account);
     else { setTrainFocus(part); setPage('train'); }
@@ -296,6 +305,7 @@ export default function App() {
   };
 
   const back = () => {
+    logout();
     try { localStorage.removeItem(MISSION_KEY); } catch { /* ignore */ }
     setSelectedProfile(undefined);
     setChosen(undefined);
@@ -323,7 +333,7 @@ export default function App() {
     setPage('home'); setSelectedProfile(undefined); setCheckInOpen(false); setPendingCheckIn(false);
     if (mode !== 'act') joinAct(newest.eid);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCases]);
+  }, [activeCases, signedIn]);
 
   // The demonstration: each step opens the real screen and, where needed, makes the simulated event happen.
   const demo = (a: DemoAction) => {
@@ -337,8 +347,8 @@ export default function App() {
     if (a === 'reset') {
       // Start the story clean: Ana's band back to normal, open emergencies and band alarms closed.
       publish({ type: 'link-clear', by: 'ana', crewId: 'ana' });
-      for (const c of activeCases) publish({ type: 'end', eid: c.eid, by: account });
-      for (const e of log) if (e.type === 'sos' && !log.some((x) => x.type === 'sos-clear' && x.sosId === e.id)) publish({ type: 'sos-clear', by: account, sosId: e.id });
+      for (const c of activeCases) publish({ type: 'end', eid: c.eid, by: account || 'shared-dashboard' });
+      for (const e of log) if (e.type === 'sos' && !log.some((x) => x.type === 'sos-clear' && x.sosId === e.id)) publish({ type: 'sos-clear', by: account || 'shared-dashboard', sosId: e.id });
     }
   };
 
@@ -354,28 +364,20 @@ export default function App() {
           <Moon />
           <Mars />
         </Suspense>
-        <Routes active={phase === 'select'} hovered={hovered} chosen={phase === 'launch' ? chosen : undefined} onHover={setHovered} onPick={pick} />
+        <Routes active={phase === 'select'} hovered={hovered} chosen={phase === 'launch' ? chosen : undefined} />
         <CameraRig pos={view.pos} look={view.look} speed={phase === 'intro' ? 0.8 : 1.2} />
       </Canvas>
 
       {phase === 'intro' && <Intro onDone={endIntro} />}
 
-      {phase === 'select' && (
-        <div className="pointer-events-none absolute inset-x-0 top-10 flex flex-col items-center text-center">
-          <div className="rise font-mono text-[10px] tracking-[0.4em] text-mute">⚷ CHIRON</div>
-          <h2 className="rise mt-3 font-serif text-3xl tracking-[0.25em] text-marble md:text-4xl" style={{ animationDelay: '0.15s' }}>CHOOSE YOUR MISSION</h2>
-          <p className="rise mt-4 max-w-md text-sm text-marble/60" style={{ animationDelay: '0.5s' }}>
-            Each mission changes the gravity, the delay to Earth and the care available on board.
-          </p>
-        </div>
-      )}
+      {phase === 'select' && <MissionChooser hovered={hovered} onHover={setHovered} onPick={pick} />}
 
       {/* CHIRON CORE: header on every screen, then the current page */}
       {phase === 'mission' && mission && (
         <div className="fade-in absolute inset-0 flex flex-col overflow-y-auto">
           <CoreHeader mission={mission} crew={crew} account={account} gmt={gmt} online={online} status={status} page={page}
             listening={voice.listening} speaking={voice.speaking} voiceSupported={voice.supported}
-            onHome={goHome} onAccount={setAccount} onVoice={voice.toggle} onStopSpeaking={stopSpeaking} onChangeMission={back}
+            onHome={goHome} onLogout={logout} onVoice={voice.toggle} onStopSpeaking={stopSpeaking} onChangeMission={back}
             onLibrary={() => { setLibraryEntry(undefined); setLibraryOpen(true); }} onRoadmap={() => setPage('roadmap')} onMyProfile={() => openProfile(account)} ownProfile={selectedProfile === account} onOpen={(p) => { setMode('watch'); setPage(p); }} />
 
           {voice.message && <div role="status" className="mx-auto w-full max-w-[1200px] px-4 pt-2 text-right text-sm text-gold md:px-8">{voice.message}</div>}
@@ -385,8 +387,14 @@ export default function App() {
               onProfile={openProfile} onPage={(p) => { setPage(p); setMode('watch'); }}
               checkedIn={!!missionCheckIns[account]} onCheckIn={() => { setPendingCheckIn(true); openProfile(account); }} onAddCrew={() => setAddCrew(true)} />
           )}
-          {page === 'profile' && member && health[member.id] && (
-            <ProfileGate key={member.id} viewer={me} owner={member} crew={crew} health={health[member.id]} link={links[member.id]} now={now}
+          {page === 'profile' && member && !signedIn && (
+            <main className="mx-auto w-full max-w-sm space-y-4 px-4 py-6">
+              <button type="button" onClick={goHome} className="min-h-12 text-gold">← Back to dashboard</button>
+              <PinPad key={member.id} person={member} title={`Sign in as ${member.name}`} onOk={() => setAccount(member.id)} />
+            </main>
+          )}
+          {page === 'profile' && member && signedIn && health[member.id] && (
+            <ProfileGate key={member.id} authenticatedOwner={member.id === account} viewer={me} owner={member} crew={crew} health={health[member.id]} link={links[member.id]} now={now}
               onOpened={(as) => { if (as === 'owner' && pendingCheckIn) { setCheckInFor(member.id); setCheckInOpen(true); } setPendingCheckIn(false); }}>
               {(as) => (
                 <ProfilePage mission={mission} member={member} account={as === 'owner' ? member.id : '-'} health={health[member.id]} link={links[member.id]} now={now}
@@ -402,9 +410,9 @@ export default function App() {
             </ProfileGate>
           )}
           {page === 'train' && <TrainPage mission={mission} crew={crew} account={account} records={recordsByCrew[account] ?? []} kb={kb} onGuide={(id) => openTeach(id)} onStock={() => setPage('respond')} focus={trainFocus} />}
-          {page === 'medical' && <PageShell title="MEDICAL SYSTEM"><MedicalTiles lines={tiles} onOpen={openMedical} /></PageShell>}
+          {page === 'medical' && <PageShell title="MEDICAL SYSTEM"><MedicalTiles lines={tiles} onOpen={openMedical} signedIn={signedIn} /></PageShell>}
           {page === 'mission' && <MissionPage mission={mission} crew={crew} links={links} now={now} />}
-          {page === 'respond' && <RespondPage mission={mission} kb={kb} memory={memoryAll.filter((m) => m.kind === 'Emergency')} crewWide={false} onStart={() => openAct()} onJoin={joinAct} />}
+          {page === 'respond' && <RespondPage mission={mission} kb={kb} memory={signedIn ? missionMemory(log, mission.id, missionCheckIns, account).filter((m) => m.kind === 'Emergency') : []} crewWide={false} onStart={() => openAct()} onJoin={joinAct} />}
           {page === 'link' && <LinkPage mission={mission.id} crew={crew} links={links} kb={kb} now={now} onProfile={openProfile} account={account} onJoin={joinAct} />}
           {page === 'roadmap' && <RoadmapPage onOpen={(p) => setPage(p)} />}
           {page === 'nasa' && <NasaPage onPage={(p) => (p === 'profile' ? openProfile(account) : setPage(p))} />}
@@ -423,7 +431,7 @@ export default function App() {
 
       {/* ACT: takes over in an emergency */}
       {phase === 'mission' && mission && mode === 'act' && (
-        <Act key={joinEid ?? "new"} mission={mission} reason={actReason} kb={kb} account={account} joinEid={joinEid} patient={actPatient} onLeave={leaveAct}
+        <Act key={joinEid ?? "new"} mission={mission} reason={actReason} kb={kb} account={account || 'shared-dashboard'} joinEid={joinEid} patient={actPatient} onLeave={leaveAct}
           listening={voice.listening} voiceSupported={voice.supported} onVoice={voice.toggle} />
       )}
 
@@ -446,10 +454,8 @@ export default function App() {
       )}
       {addCrew && <AddCrew crew={crew} onClose={() => setAddCrew(false)} />}
 
-      {phase === 'mission' && mission && !signedIn && <SignIn crew={crew} mission={mission} onDone={setAccount} />}
-
-      {phase === 'mission' && mission && <EmergencyAlerts mission={mission.id} account={account} inResponse={mode === 'act'} viewingEid={mode === 'act' ? joinEid : undefined} onJoin={joinAct} />}
-      {phase === 'mission' && mission && <SosAlerts hidden={mode === 'act'} account={account} onRespond={(id) => openAct('LINK emergency button pressed', id)} />}
+      {phase === 'mission' && mission && <EmergencyAlerts mission={mission.id} account={account || 'shared-dashboard'} inResponse={mode === 'act'} viewingEid={mode === 'act' ? joinEid : undefined} onJoin={joinAct} />}
+      {phase === 'mission' && mission && <SosAlerts hidden={mode === 'act'} account={account || 'shared-dashboard'} onRespond={(id) => openAct('LINK emergency button pressed', id)} />}
 
       {voiceConfirm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#020408]/85 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="voice-confirm-title">

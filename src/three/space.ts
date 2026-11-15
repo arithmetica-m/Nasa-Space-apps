@@ -12,21 +12,38 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 type Route =
   | { kind: 'ring'; center: THREE.Vector3; radius: number; tilt: number }
-  | { kind: 'arc'; curve: THREE.CubicBezierCurve3 };
+  | { kind: 'arc'; curve: THREE.Curve<THREE.Vector3> };
 
-function arc(from: { pos: THREE.Vector3; r: number }, to: { pos: THREE.Vector3; r: number }, lift: number): Route {
-  const dir = to.pos.clone().sub(from.pos).normalize();
-  const p0 = from.pos.clone().add(dir.clone().multiplyScalar(from.r * 1.15));
+// One parking orbit before departure, with the transfer tangent to the orbit.
+// This is an illustrative trajectory in the scene's compressed distances.
+class ParkingOrbit extends THREE.Curve<THREE.Vector3> {
+  constructor() { super(); }
+
+  getPoint(t: number, target = new THREE.Vector3()) {
+    const angle = Math.PI / 2 - t * Math.PI * 2;
+    return target.set(Math.cos(angle) * 1.55, 0, Math.sin(angle) * 1.55)
+      .applyAxisAngle(new THREE.Vector3(1, 0, 0), 0.38)
+      .add(BODIES.earth.pos);
+  }
+}
+
+function departure(to: { pos: THREE.Vector3; r: number }, lift: number): Route {
+  const orbit = new ParkingOrbit();
+  const p0 = orbit.getPoint(1);
+  const dir = to.pos.clone().sub(p0).normalize();
   const p3 = to.pos.clone().sub(dir.clone().multiplyScalar(to.r * 1.25));
-  const c1 = p0.clone().lerp(p3, 0.28).add(UP.clone().multiplyScalar(lift));
+  const c1 = p0.clone().add(new THREE.Vector3(p0.distanceTo(p3) * 0.4, 0, 0));
   const c2 = p0.clone().lerp(p3, 0.72).add(UP.clone().multiplyScalar(lift));
-  return { kind: 'arc', curve: new THREE.CubicBezierCurve3(p0, c1, c2, p3) };
+  const curve = new THREE.CurvePath<THREE.Vector3>();
+  curve.add(orbit);
+  curve.add(new THREE.CubicBezierCurve3(p0, c1, c2, p3));
+  return { kind: 'arc', curve };
 }
 
 export const ROUTES: Record<MissionId, Route> = {
   iss: { kind: 'ring', center: BODIES.earth.pos, radius: 1.55, tilt: 0.38 },
-  moon: arc(BODIES.earth, BODIES.moon, 2.2),
-  'mars-transit': arc(BODIES.earth, BODIES.mars, 6.5),
+  moon: departure(BODIES.moon, 2.2),
+  'mars-transit': departure(BODIES.mars, 6.5),
   'mars-surface': { kind: 'ring', center: BODIES.mars.pos, radius: 0.95, tilt: 0.3 },
 };
 

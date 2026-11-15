@@ -14,7 +14,7 @@ import { DELAY_MIN, buildPlan, casesFrom, crewNow, rolesOf } from '../../emergen
 import { publish, useLog } from '../../emergency/sync';
 import { newId } from '../../emergency/events';
 import { crew } from '../../emergency/data';
-import { speak } from '../VoiceControl';
+import { speak, stopSpeaking } from '../VoiceControl';
 import { EMERGENCY_VOICE_EVENT, type EmergencyVoice } from '../../lib/voiceCommands';
 import { measurementError, numericRange } from '../../lib/measurementValidation';
 import { openProtocol } from '../Explained';
@@ -242,8 +242,21 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
         )}
         <button type="button" onClick={() => setReadAloud(!readAloud)} aria-pressed={readAloud} aria-label="Read steps aloud"
           className={`flex min-h-16 min-w-16 items-center justify-center border-2 ${readAloud ? 'border-gold/70 text-gold' : 'border-marble/30 text-marble/60'}`}>{readAloud ? <Volume2 size={22} /> : <VolumeX size={22} />}</button>
+        <button type="button" onClick={() => setEnding(true)} aria-expanded={ending} aria-controls="end-emergency-confirmation"
+          className="min-h-16 border-2 border-[#e39b4b] bg-[#e39b4b]/15 px-5 text-lg font-bold text-[#f3c28d] hover:bg-[#e39b4b]/25">END EMERGENCY</button>
         <button onClick={onLeave} aria-label="Back to the dashboard" className="flex min-h-16 items-center gap-2 border-2 border-marble/30 px-4 text-lg text-marble/80 hover:border-marble/60"><ArrowLeft size={20} /> EXIT</button>
       </div>
+      {ending && (
+        <section id="end-emergency-confirmation" aria-labelledby="end-emergency-title" className="mx-auto mt-4 w-full max-w-5xl space-y-3 border-2 border-[#e39b4b]/60 bg-[#1a0c0e] p-4">
+          <h2 id="end-emergency-title" className="text-2xl font-bold text-marble">End this emergency for everyone?</h2>
+          <p className="text-lg text-marble/85">This closes the active response on every device and keeps the medical log.</p>
+          {!allDone && <p className="text-lg text-[#f3c28d]">Some procedure steps are unfinished. End the response only when the crew is ready to stop.</p>}
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => { stopSpeaking(); publish({ type: 'end', eid, by: account }); }} className="min-h-16 bg-[#e39b4b] px-5 text-xl font-semibold text-[#17100a]">YES, END EMERGENCY</button>
+            <button type="button" onClick={() => setEnding(false)} className="min-h-16 border-2 border-marble/30 px-5 text-xl text-marble/85">KEEP EMERGENCY ACTIVE</button>
+          </div>
+        </section>
+      )}
     </header>
   );
 
@@ -486,19 +499,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
           </section>
         )}
 
-        {isLead && (
-          ending ? (
-            <div className="grid gap-3 border-2 border-[#e39b4b]/60 p-3 sm:grid-cols-2">
-              <button onClick={() => publish({ type: 'end', eid, by: account })} className="min-h-16 bg-[#e39b4b] text-xl font-semibold text-[#17100a]">YES, END IT FOR EVERYONE</button>
-              <button onClick={() => setEnding(false)} className="min-h-16 border-2 border-marble/30 text-xl text-marble/85">KEEP GOING</button>
-            </div>
-          ) : (
-            <button onClick={() => (allDone ? publish({ type: 'end', eid, by: account }) : setEnding(true))}
-              className={`min-h-16 w-full border-2 text-xl font-semibold ${allDone ? 'border-[#5cc8a8] bg-[#5cc8a8]/10 text-[#9be3cc]' : 'border-marble/25 text-marble/70'}`}>
-              {allDone ? 'ALL STEPS DONE · END THE EMERGENCY' : 'END THE EMERGENCY'}
-            </button>
-          )
-        )}
+
       </main>
     </div>
   );

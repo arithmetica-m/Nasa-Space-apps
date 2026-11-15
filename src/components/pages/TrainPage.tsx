@@ -35,8 +35,8 @@ interface Props {
 export function TrainPage({ mission, crew, account, records, kb, onGuide, onStock, focus }: Props) {
   const [practice, setPractice] = useState<string>();   // skill id being practised
   const [version, setVersion] = useState(0);            // refresh after a practice is saved
-  const me = crew.find((c) => c.id === account)!;
-  const mine = useMemo(() => skillStatus(account, mission.id), [account, mission.id, version]);
+  const me = crew.find((c) => c.id === account);
+  const mine = useMemo(() => account ? skillStatus(account, mission.id) : [], [account, mission.id, version]);
   const sim = useMemo(() => readiness(kb, mission.id), [kb, mission.id, version]);
   // Any approved protocol can be practised, even one not needed on this mission.
   const approved = (cat: string) => kb.find((p) => p.category === cat && p.status === 'approved' && p.steps.length);
@@ -47,7 +47,7 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
   if (practice) {
     const p = approved(practice)!;
     return <Practice protocol={p} all={kb.filter((x) => x.status === 'approved' && x.steps.length)} scenario={SCENARIOS[practice]}
-      onDone={(score, total) => { savePractice({ crewId: account, skillId: practice, score, total, t: Date.now() }); setVersion((v) => v + 1); }}
+      onDone={(score, total) => { if (account) savePractice({ crewId: account, skillId: practice, score, total, t: Date.now() }); setVersion((v) => v + 1); }}
       onClose={() => setPractice(undefined)} />;
   }
 
@@ -59,12 +59,12 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
           <h3 className="font-mono text-xs tracking-[0.2em] text-gold">WHAT TO DO TO BE READY</h3>
           <ul className="mt-2 space-y-2">
             {prep.todo.map((t) => <li key={t} className="border-l-2 border-gold pl-3 text-lg text-marble">{t}</li>)}
-            {myConcerns.length > 0 && <li className="border-l-2 border-[#e39b4b] pl-3 text-lg text-[#f3c28d]">{me.name.split(' ')[0]}: CHIRON has personal advice for you. Open your profile.</li>}
+            {me && myConcerns.length > 0 && <li className="border-l-2 border-[#e39b4b] pl-3 text-lg text-[#f3c28d]">{me.name.split(' ')[0]}: CHIRON has personal advice for you. Open your profile.</li>}
           </ul>
           <div className="mt-2"><Reasoning steps={[
             { label: 'MISSION INFORMATION', lines: [`Next event: ${next.title}, mission day ${next.day} (today is day ${mission.today}).`, next.health] },
             { label: 'RULE', lines: [`For this event CHIRON checks: ${prep.systems.join(', ')}.`, 'Only your own readings are used here. Other crew members see their own advice.'] },
-            { label: 'RESULT', lines: [myConcerns.length ? `${myConcerns.length} of your readings outside normal.` : 'All your related readings are within normal.'] },
+            { label: 'RESULT', lines: [!me ? 'Sign in for checks against your personal readings.' : myConcerns.length ? `${myConcerns.length} of your readings outside normal.` : 'All your related readings are within normal.'] },
           ]} /></div>
         </Panel>
       )}
@@ -105,7 +105,7 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
       </>}
 
       {focus === 'train' && <>
-      <Panel title={`YOUR REFRESHERS, ${me.name.split(' ')[0].toUpperCase()}`}>
+      {me && <Panel title={`YOUR REFRESHERS, ${me.name.split(' ')[0].toUpperCase()}`}>
         <ul className="space-y-2">
           {mine.filter((s) => s.due).slice(0, 3).map((s) => (
             <li key={s.skill.id} className="flex flex-wrap items-center justify-between gap-2 border border-[#e39b4b]/40 p-3">
@@ -123,7 +123,9 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
           ))}
           {!mine.some((s) => s.due) && <li className="text-lg text-[#7bd5b8]">All your skills are up to date.</li>}
         </ul>
-      </Panel>
+      </Panel>}
+
+      {!account && <p className="text-base text-marble/70">Practice is available without signing in. Sign in to see your refreshers and save practice to your training record.</p>}
 
       <Panel title="PRACTISE AN EMERGENCY">
         <div className="grid gap-2 md:grid-cols-2">
@@ -150,7 +152,7 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
         </div>
       </Panel>
 
-      <details className="border border-marble/10 bg-void/80 backdrop-blur-md">
+      {me && <details className="border border-marble/10 bg-void/80 backdrop-blur-md">
         <summary className="min-h-14 cursor-pointer px-5 py-4 font-serif text-lg tracking-[0.12em] text-marble">CREW TRAINING</summary>
         <div className="overflow-x-auto border-t border-marble/10 p-4">
           <table className="w-full min-w-[560px] text-base">
@@ -172,7 +174,7 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
           </table>
           <p className="mt-2 text-sm text-marble/55">Days since last practice. Demo rule: medical crew every 60 days, others every 120.</p>
         </div>
-      </details>
+      </details>}
       </>}
     </PageShell>
   );
