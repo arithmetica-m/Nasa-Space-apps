@@ -14,7 +14,7 @@ npm install
 npm run dev
 ```
 
-Open the address Vite prints. Choose a mission (try **Mars Transit**) and who uses the device. Then open **▶ DEMONSTRATION** at the bottom of the home screen.
+Open the address Vite prints. Choose a mission (try **Mars Transit**) and who uses the device. Then open **▶ DEMONSTRATION** at the bottom of the home screen. Profiles ask for a PIN (see Privacy below).
 
 To see several crew devices working together, open a second browser tab and switch it to another crew member in settings (⚙). On separate devices on one network:
 
@@ -22,6 +22,23 @@ To see several crew devices working together, open a second browser tab and swit
 npm run relay
 npm run dev -- --host
 ```
+
+## Privacy: one shared dashboard, protected profiles
+
+The crew dashboard shows only each person's general status, CHIRON LINK connection and alert count. Medical details live in each astronaut's own profile, behind a PIN.
+
+| Role | What they can open |
+| --- | --- |
+| Astronaut | Their own medical profile |
+| Medical officer (and backup) | Any profile; every opening is written in the medical log |
+| Commander | Status, location and tasks of each person, not medical details |
+| Anyone, in an emergency | **Emergency access**: pick a reason, the profile opens for 15 minutes, and name, time and reason are logged where the owner can see them |
+
+Demo PINs (prototype sign-in, checked in the browser, not real security): Ana `1111`, Lena `2222`, Kai `3333`, Ravi `4444`. They are defined in `src/access/access.ts`.
+
+## Emergency mode
+
+Press **EMERGENCY MODE** on any screen, or turn on the microphone and say **"emergency"**. Two taps start it: who, then what. Each crew member's device then shows one large step at a time with big DONE / YES / NO buttons, read aloud. Voice works throughout: "done", "yes", "no", "can't", "repeat", and on the start screen a name and "breathing", "allergy", "decompression" or "panic".
 
 ## The main idea: the Response Planner
 
@@ -119,6 +136,7 @@ CHIRON's advice comes from the mission medical library (`src/library/entries.ts`
 | `src/emergency/` | Protocols, role assignment, shared event log, Earth reports |
 | `src/library/` | Medical library and personal advice |
 | `src/link/` | Simulated wearables and prototype warning rules |
+| `src/access/` | Roles, demo PINs and profile access rules |
 | `src/triage/` | "Report something" symptom checker |
 | `src/prevent/`, `src/train/`, `src/recover/` | Readiness simulation, training, recovery checklist |
 | `src/data/` | Indicators, missions, simulated health history, OSDR research snapshot |

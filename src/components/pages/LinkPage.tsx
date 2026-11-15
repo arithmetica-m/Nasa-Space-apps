@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ArrowDownUp, BatteryLow, Siren, Watch } from 'lucide-react';
+import { ArrowDownUp, BatteryLow, Lock, Siren, Watch } from 'lucide-react';
 import type { MissionId } from '../../types';
 import type { CrewMember, Procedure } from '../../emergency/types';
 import { buildPlan, casesFrom, rolesOf } from '../../emergency/plan';
@@ -8,6 +8,7 @@ import { HAPTICS, ago, type LinkStatus } from '../../link/link';
 import { LinkStrip } from './ProfilePage';
 import { PageShell, Panel, Tag } from './ui';
 import { LinkFlow } from './LinkFlow';
+import { accessRole } from '../../access/access';
 import { roleOf } from '../MissionDashboard';
 
 interface Props {
@@ -17,10 +18,13 @@ interface Props {
   kb: Procedure[];
   now: number;
   onProfile: (id: string) => void;
+  account: string;
 }
 
 // CHIRON LINK: every astronaut's wearable, and what travels between it and CHIRON CORE.
-export function LinkPage({ mission, crew, links, kb, now, onProfile }: Props) {
+export function LinkPage({ mission, crew, links, kb, now, onProfile, account }: Props) {
+  const viewer = crew.find((c) => c.id === account);
+  const medical = !!viewer && accessRole(viewer) === 'medical';
   const log = useLog();
   // What CORE has sent to each band: the person's current emergency task, if any.
   const sent = useMemo(() => {
@@ -70,7 +74,9 @@ export function LinkPage({ mission, crew, links, kb, now, onProfile }: Props) {
               <span className="text-gold">{roleOf(c)}</span>
               <span className={!l.connected ? 'text-[#f3c28d]' : l.eva || /EVA/.test(l.activity) ? 'text-[#f3c28d]' : 'text-[#7bd5b8]'}>{!l.connected ? 'Availability unknown' : l.eva ? 'Busy: on EVA' : /EVA/.test(l.activity) ? 'Busy: EVA preparation' : 'Available to help'}</span>
             </div>
-            <div className="mt-3"><LinkStrip link={l} now={now} /></div>
+            {medical || c.id === account
+              ? <div className="mt-3"><LinkStrip link={l} now={now} /></div>
+              : <p className="mt-3 flex items-center gap-2 text-base text-marble/55"><Lock size={16} /> Readings are private: only {c.name.split(' ')[0]} and the medical officers see them.{l.warnings.length > 0 && <span className="text-[#ff9c9c]"> A health warning is active.</span>}</p>}
             {l.connected && <div className="mt-3"><LinkFlow link={l} name={c.name} now={now} onProfile={() => onProfile(c.id)} /></div>}
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div>

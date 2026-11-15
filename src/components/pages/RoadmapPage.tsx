@@ -17,7 +17,7 @@ const NEEDS: [string, string][] = [
 
 const LEVELS: { title: string; note: string; items: string[] }[] = [
   { title: 'LEVEL 1 · WORKS IN THIS PROTOTYPE', note: 'Real behaviour on simulated data.', items: [
-    'CHIRON CORE home: crew, status, LINK summary, mission timeline', 'Astronaut dashboards: overview, history, mission', 'Daily check-in (type, sync from device, or say it)',
+    'CHIRON CORE home: crew, status, LINK summary; shared MISSION page', 'Protected profiles: PIN, role-based access, logged emergency access', 'Astronaut dashboards: overview, history, mission', 'Daily check-in (type, sync from device, or say it)',
     'Body map with flagged areas and plain-language advice', 'Read-only medical library; only Mission Control can change it', 'Emergency mode on every device: tasks, measurements, equipment, crew roles',
     'Response Planner overview in every emergency (seven factors)', 'Report something: symptom checker with follow-up questions', 'Automatic private reports to Earth', 'Medical stock lists', 'Recovery checklist and timelines', 'Medical log of the mission', 'Voice commands',
   ] },
@@ -59,6 +59,15 @@ export function RoadmapPage({ onOpen }: { onOpen: (p: Page) => void }) {
       <Panel title="CHIRON VISION" tag="FUTURE CONCEPT">
         <VisionConcept />
         <p className="mt-2 text-base text-marble/75">A helmet or suit display for when hands are busy. It would need hardware built and tested for spaceflight: ordinary consumer AR glasses are not assumed to work on an EVA.</p>
+      </Panel>
+      <Panel title="WHO CAN SEE WHAT">
+        <ul className="space-y-1 text-base text-marble/85">
+          <li>• The shared dashboard shows general status only. Medical details are in each person’s profile, behind their PIN.</li>
+          <li>• Astronaut: their own profile. Medical officers: any profile, and every opening is logged.</li>
+          <li>• Commander: status, location and tasks, not medical details.</li>
+          <li>• Emergency access: anyone can open a profile for 15 minutes with a reason; it is logged where the owner sees it.</li>
+        </ul>
+        <p className="mt-2 text-sm text-marble/50">Prototype sign-in with demo PINs, not real security.</p>
       </Panel>
       <Panel title="RULES CHIRON FOLLOWS">
         <ul className="space-y-1 text-sm text-marble/85">

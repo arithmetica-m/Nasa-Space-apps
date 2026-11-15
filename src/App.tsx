@@ -25,6 +25,13 @@ import { RespondPage } from './components/pages/RespondPage';
 import { LinkPage } from './components/pages/LinkPage';
 import { RoadmapPage } from './components/pages/RoadmapPage';
 import { NasaPage } from './components/pages/NasaPage';
+import { MissionPage } from './components/pages/MissionPage';
+import { MedicalTiles, type MedicalPart } from './components/MissionDashboard';
+import { PageShell } from './components/pages/ui';
+import { readiness } from './prevent/readiness';
+import { plansFor } from './recover/recovery';
+import { ProfileGate } from './components/ProfileGate';
+import { accessRole, useUnlocked } from './access/access';
 import { DemoPage, type DemoAction } from './components/pages/DemoPage';
 import { publish } from './emergency/sync';
 import { SosAlerts } from './components/SosAlerts';
@@ -130,6 +137,8 @@ export default function App() {
   const now = useNow();
   const aspect = useAspect();
 
+  const auth = useUnlocked(account);
+  const me = crew.find((m) => m.id === account) ?? crew[0];
   const openProfile = (id: string) => { setSelectedProfile(id); setPage('profile'); setMode('watch'); };
   const goHome = () => { setPage('home'); setSelectedProfile(undefined); setMode('watch'); };
 
@@ -168,7 +177,7 @@ export default function App() {
       }
       case 'home': goHome(); speak('Crew status.'); break;
       case 'checkin': openProfile(account); setCheckInOpen(true); speak('Opening your check-in.'); break;
-      case 'teach': setPage('train'); setMode('watch'); speak('Opening training.'); break;
+      case 'teach': setTrainFocus('train'); setPage('train'); setMode('watch'); speak('Opening training.'); break;
       case 'equipment': setPage('respond'); setMode('watch'); speak('Showing medical stock.'); break;
       case 'library': setLibraryOpen(true); speak('Opening the medical library.'); break;
       default: speak('Sorry, I did not catch that. Try crew status, my profile, check in, or emergency.');
@@ -223,14 +232,25 @@ export default function App() {
   }, [mission, activeCases, log, kb, links]);
 
   // One live line for each of the four main functions on the home screen.
-  const tiles = useMemo(() => {
-    if (!mission) return { train: '', respond: '' };
+  const [trainFocus, setTrainFocus] = useState<'prevent' | 'train'>('prevent');
+  const tiles = useMemo<Record<MedicalPart, string>>(() => {
+    if (!mission) return { prevent: '', train: '', respond: '', recover: '' };
     const due = skillStatus(account, mission.id).filter((s) => s.due).length;
+    const gaps = readiness(kb, mission.id).filter((r) => !r.ready).length;
+    const todo = plansFor(account, recordsByCrew[account] ?? []).length;
     return {
+      prevent: gaps ? `${gaps} emergencies need preparation` : 'Crew is prepared',
       train: due ? `${due} refresher${due > 1 ? 's' : ''} due for you` : 'Your skills are up to date',
       respond: activeCases.length ? `${activeCases.length} ACTIVE EMERGENCY` : status.label === 'CHECK STOCK' ? 'No emergencies · check stock' : 'No active emergencies',
+      recover: todo ? `${todo} reading${todo > 1 ? 's' : ''} to bring back to normal` : 'You are at your normal',
     };
-  }, [mission, health, account, recordsByCrew, activeCases, status]);
+  }, [mission, account, kb, recordsByCrew, activeCases, status]);
+  const openMedical = (part: MedicalPart) => {
+    setMode('watch');
+    if (part === 'respond') setPage('respond');
+    else if (part === 'recover') openProfile(account);
+    else { setTrainFocus(part); setPage('train'); }
+  };
 
   const marks = useMemo(() => {
     if (!records.length || !chosen) return [];
@@ -285,7 +305,7 @@ export default function App() {
 
   // The demonstration: each step opens the real screen and, where needed, makes the simulated event happen.
   const demo = (a: DemoAction) => {
-    if (a === 'prepare') setPage('train');
+    if (a === 'prepare') { setTrainFocus('prevent'); setPage('train'); }
     if (a === 'monitor') { publish({ type: 'link-reading', by: 'ana', crewId: 'ana', key: 'spo2', value: 89 }); goHome(); }
     if (a === 'emergency') openAct('LINK warning: blood oxygen 89%', 'ana');
     if (a === 'coordinate') setPage('link');
@@ -334,16 +354,17 @@ export default function App() {
           <CoreHeader mission={mission} crew={crew} account={account} gmt={gmt} online={online} status={status} page={page}
             listening={voice.listening} speaking={voice.speaking} voiceSupported={voice.supported}
             onHome={goHome} onAccount={setAccount} onVoice={voice.toggle} onStopSpeaking={stopSpeaking} onChangeMission={back}
-            onLibrary={() => { setLibraryEntry(undefined); setLibraryOpen(true); }} onRoadmap={() => setPage('roadmap')} onOpen={(p) => { setMode('watch'); setPage(p); }} />
+            onLibrary={() => { setLibraryEntry(undefined); setLibraryOpen(true); }} onRoadmap={() => setPage('roadmap')} unlocked={auth.unlocked} onLock={auth.lock} onMyProfile={() => openProfile(account)} ownProfile={selectedProfile === account} onOpen={(p) => { setMode('watch'); setPage(p); }} />
 
           {voice.message && <div role="status" className="mx-auto w-full max-w-[1200px] px-4 pt-2 text-right text-sm text-gold md:px-8">{voice.message}</div>}
 
           {page === 'home' && (
-            <HomePage mission={mission} crew={crew} account={account} health={health} links={links} now={now} tiles={tiles}
-              onProfile={openProfile} onPage={(p) => { setPage(p); setMode('watch'); }}
+            <HomePage mission={mission} crew={crew} account={account} health={health} links={links} now={now} tiles={tiles} onMedical={openMedical}
+              onProfile={openProfile} onPage={(p) => { setPage(p); setMode('watch'); }} medical={accessRole(me) === 'medical'}
               checkedIn={!!missionCheckIns[account]} onCheckIn={() => { openProfile(account); setCheckInOpen(true); }} />
           )}
           {page === 'profile' && member && health[member.id] && (
+            <ProfileGate viewer={me} owner={member} unlocked={auth.unlocked} onUnlock={auth.unlock} health={health[member.id]} link={links[member.id]} now={now}>
             <ProfilePage mission={mission} member={member} account={account} health={health[member.id]} link={links[member.id]} now={now}
               records={records} marks={marks} selection={selection} onSelect={setSelection}
               checkedIn={!!todayCheckIn} symptoms={todayCheckIn?.symptoms ?? []}
@@ -353,10 +374,13 @@ export default function App() {
                 const prev = c[mission.id]?.[account];
                 return { ...c, [mission.id]: { ...c[mission.id], [account]: { values: { ...prev?.values, ...values }, symptoms: prev?.symptoms ?? [], time: gmt, at: Date.now() } } };
               })} />
+            </ProfileGate>
           )}
-          {page === 'train' && <TrainPage mission={mission} crew={crew} account={account} records={recordsByCrew[account] ?? []} kb={kb} onGuide={(id) => openTeach(id)} onStock={() => setPage('respond')} />}
-          {page === 'respond' && <RespondPage mission={mission} kb={kb} memory={memoryAll} onStart={() => openAct()} onJoin={joinAct} />}
-          {page === 'link' && <LinkPage mission={mission.id} crew={crew} links={links} kb={kb} now={now} onProfile={openProfile} />}
+          {page === 'train' && <TrainPage mission={mission} crew={crew} account={account} records={recordsByCrew[account] ?? []} kb={kb} onGuide={(id) => openTeach(id)} onStock={() => setPage('respond')} focus={trainFocus} />}
+          {page === 'medical' && <PageShell title="MEDICAL SYSTEM"><MedicalTiles lines={tiles} onOpen={openMedical} /></PageShell>}
+          {page === 'mission' && <MissionPage mission={mission} crew={crew} links={links} now={now} />}
+          {page === 'respond' && <RespondPage mission={mission} kb={kb} memory={accessRole(me) === 'medical' ? memoryAll : memoryAll.filter((m) => m.who === me.name || m.kind === 'Emergency')} crewWide={accessRole(me) === 'medical'} onStart={() => openAct()} onJoin={joinAct} />}
+          {page === 'link' && <LinkPage mission={mission.id} crew={crew} links={links} kb={kb} now={now} onProfile={openProfile} account={account} />}
           {page === 'roadmap' && <RoadmapPage onOpen={(p) => setPage(p)} />}
           {page === 'nasa' && <NasaPage onPage={(p) => (p === 'profile' ? openProfile(account) : setPage(p))} />}
           {page === 'demo' && <DemoPage mission={mission} onAction={demo} />}

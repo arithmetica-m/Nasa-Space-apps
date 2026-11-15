@@ -8,6 +8,7 @@ import { outsideness } from '../data/simulate';
 import { stateColor } from '../lib/theme';
 import { explain, symptomMeaning } from '../data/meanings';
 import { Explained } from './Explained';
+import { LikelyCauses, ReportSomething } from './ReportSomething';
 
 type Step =
   | { kind: 'number'; id: string; question: string; device: string }
@@ -49,7 +50,9 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
   const [draft, setDraft] = useState('');
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
-  const [symptomHelp, setSymptomHelp] = useState(false);
+  const [asking, setAsking] = useState<string>();
+  // Today's record with the readings just entered, so causes use the newest data.
+  const todayRecords = [{ ...latest, values: { ...latest.values, ...values } }];
   const [syncing, setSyncing] = useState<string>();
   const [hint, setHint] = useState('');
   const step = STEPS[i];
@@ -140,6 +143,7 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
               {symptoms.map((sym) => (
                 <li key={sym} className="border border-marble/10 px-3 py-3">
                   <div className="text-[15px] text-[#e39b4b]">{sym}</div>
+                  <div className="mt-2"><LikelyCauses symptom={sym} crewId={crewId ?? ''} records={todayRecords} onAsk={() => setAsking(sym)} /></div>
                   <div className="mt-2"><Explained crewId={crewId} e={{ name: sym, direction: 'high', what: '', means: symptomMeaning[sym].what, todo: symptomMeaning[sym].todo, topic: { symptom: sym } }} /></div>
                 </li>
               ))}
@@ -196,23 +200,30 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
           <div className="mt-6">
             <div className="font-mono text-[10px] tracking-[0.25em] text-mute">QUESTION {i + 1} OF {STEPS.length}</div>
             <h3 className="mt-2 font-serif text-xl tracking-[0.1em] text-marble">Any symptoms?</h3>
-            <div className="mt-4 flex flex-wrap gap-1.5">
+            <div className="mt-4 flex flex-wrap gap-2">
               {SYMPTOMS.map((s) => {
                 const on = symptoms.includes(s);
                 return (
                   <button key={s} aria-pressed={on} onClick={() => setSymptoms(on ? symptoms.filter((x) => x !== s) : [...symptoms, s])}
-                    className={`border px-3 py-2 text-xs ${on ? 'border-gold text-gold' : 'border-marble/15 text-marble/80 hover:border-marble/40'}`}>{s}</button>
+                    className={`min-h-12 border px-4 text-base ${on ? 'border-gold bg-gold/10 text-gold' : 'border-marble/20 text-marble/85 hover:border-marble/40'}`}>{s}</button>
                 );
               })}
             </div>
-            <button type="button" onClick={() => setSymptomHelp((visible) => !visible)} aria-expanded={symptomHelp} className="mt-4 text-sm text-gold underline underline-offset-4">
-              {symptomHelp ? 'Hide symptom help' : 'What might these symptoms mean?'}
-            </button>
-            {symptomHelp && <p className="mt-2 text-sm text-marble/70">A symptom can have many causes. Tell the medical crew what you feel; this tool cannot tell you the cause.</p>}
+            {symptoms.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {symptoms.map((sym) => (
+                  <div key={sym}>
+                    <div className="text-base text-[#e39b4b]">{sym}</div>
+                    <LikelyCauses symptom={sym} crewId={crewId ?? ''} records={todayRecords} />
+                  </div>
+                ))}
+              </div>
+            )}
             <button onClick={next} className="mt-6 w-full bg-gold py-2.5 font-mono text-xs tracking-[0.3em] text-void hover:bg-marble">{symptoms.length ? 'FINISH' : 'NO SYMPTOMS, FINISH'}</button>
           </div>
         )}
       </div>
+      {asking && <ReportSomething crewId={crewId ?? ""} records={todayRecords} startText={asking} onClose={() => setAsking(undefined)} onEmergency={onClose} />}
     </div>
   );
 }

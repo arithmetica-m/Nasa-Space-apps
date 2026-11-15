@@ -15,12 +15,13 @@ interface Props {
   mission: Mission;
   kb: Procedure[];
   memory: MemoryItem[];
+  crewWide: boolean;
   onStart: () => void;
   onJoin: (eid: string) => void;
 }
 
 // RESPOND: everything for emergencies, before, during and after.
-export function RespondPage({ mission, kb, memory, onStart, onJoin }: Props) {
+export function RespondPage({ mission, kb, memory, crewWide, onStart, onJoin }: Props) {
   const log = useLog();
   const active = casesFrom(log).filter((c) => !c.ended && c.mission === mission.id);
   const stock = inventoryNow(log, mission.id);
@@ -101,7 +102,7 @@ export function RespondPage({ mission, kb, memory, onStart, onJoin }: Props) {
         ]} /></div>
       </Panel>
 
-      <MedicalLog items={memory} title="CREW MEDICAL LOG" showWho />
+      <MedicalLog items={memory} title={crewWide ? "CREW MEDICAL LOG" : "MEDICAL LOG · EMERGENCIES AND YOUR OWN ENTRIES"} showWho />
     </PageShell>
   );
 }

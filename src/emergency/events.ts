@@ -33,6 +33,8 @@ export type ChironEvent = Base & (
   | { type: 'link-reading'; crewId: string; key: 'hr' | 'spo2' | 'skin' | 'activity'; value: number }
   // Back to the band's normal simulated readings.
   | { type: 'link-clear'; crewId: string }
+  // Someone other than the owner opened a medical profile (medical officer, or logged emergency access).
+  | { type: 'profile-access'; crewId: string; role: 'medical' | 'emergency'; reason?: string }
 );
 
 // Distributes Omit over the union, so each event kind keeps its own fields.

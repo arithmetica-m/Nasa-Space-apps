@@ -45,6 +45,10 @@ export function missionMemory(log: ChironEvent[], mission: MissionId, checkIns: 
     for (const e of log) if (e.type === 'medical-access' && e.eid === c.eid) out.push({ t: e.t, kind: 'Record', who: name(e.by), title: `${name(e.by)} opened ${name(e.patientId)}’s medical record`, detail: e.reason || undefined, group: c.eid });
     for (const msg of c.messages.filter((x) => x.report)) out.push({ t: msg.sentAt || c.startedAt, kind: 'Earth', who: 'CHIRON', title: `Sent to Earth: ${msg.title}`, group: c.eid });
   }
+  for (const e of log) {
+    if (e.type !== 'profile-access' || !mine(e.crewId)) continue;
+    out.push({ t: e.t, kind: 'Access', who: name(e.by), title: `${name(e.by)} opened ${name(e.crewId)}’s medical profile`, detail: e.role === 'emergency' ? `emergency access: ${e.reason ?? 'no reason given'}` : 'medical officer access' });
+  }
   for (const r of practiceRecords()) {
     if (!mine(r.crewId)) continue;
     out.push({ t: r.t, kind: 'Training', who: name(r.crewId), title: `Practised: ${SKILLS.find((s) => s.id === r.skillId)?.name ?? r.skillId}`, detail: `score ${r.score}/${r.total}` });

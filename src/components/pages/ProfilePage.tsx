@@ -19,6 +19,11 @@ import type { Selection } from '../Frieze';
 import { Reasoning } from '../Reasoning';
 import { roleOf } from '../MissionDashboard';
 import { Panel, Tag } from './ui';
+import { DUTIES } from './MissionPage';
+import { useLog } from '../../emergency/sync';
+import { buildPlan, casesFrom, rolesOf } from '../../emergency/plan';
+import { procedures } from '../../emergency/data';
+import { skillStatus } from '../../train/training';
 
 type Tab = 'overview' | 'history' | 'mission';
 
@@ -47,6 +52,19 @@ export function ProfilePage(p: Props) {
   const [tab, setTab] = useState<Tab>('overview');
   const [reporting, setReporting] = useState<{ part?: BodyPart }>();
   const isSelf = p.member.id === p.account;
+  const log = useLog();
+  // What this person is asked to do right now: emergency steps first, then routine items.
+  const tasks: string[] = [];
+  const cases = casesFrom(log);
+  for (const c of cases.filter((x) => !x.ended && x.mission === p.mission.id)) {
+    if (c.patientId === p.member.id) { tasks.push('Emergency: you are the patient. Your crew is helping.'); continue; }
+    const plan = buildPlan(c, procedures, log, cases);
+    const task = plan.tasks.find((t) => rolesOf(plan.roles, p.member.id).includes(t.step.role) && t.status === 'ready');
+    if (task) tasks.push(`Emergency step: ${task.step.ask?.question ?? task.step.text}`);
+  }
+  if (isSelf && !p.checkedIn) tasks.push('Daily check-in');
+  const due = skillStatus(p.member.id, p.mission.id).filter((x) => x.due);
+  if (due.length) tasks.push(`Refresher training: ${due.map((d) => d.skill.name).slice(0, 2).join(', ')}`);
 
   return (
     <main className="mx-auto w-full max-w-[1200px] space-y-4 px-4 pb-24 pt-2 md:px-8">
@@ -103,6 +121,21 @@ export function ProfilePage(p: Props) {
 
       {tab === 'mission' && (
         <>
+          <Panel title="RESPONSIBILITIES AND TASKS" tag="SIMULATED">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <h3 className="font-mono text-xs tracking-[0.2em] text-gold">ON THIS MISSION</h3>
+                <ul className="mt-2 space-y-1 text-lg text-marble">{(DUTIES[p.member.id] ?? []).map((d) => <li key={d}>• {d}</li>)}</ul>
+              </div>
+              <div>
+                <h3 className="font-mono text-xs tracking-[0.2em] text-gold">TO DO NOW</h3>
+                <ul className="mt-2 space-y-1 text-lg text-marble">
+                  {tasks.map((t) => <li key={t} className={t.startsWith('Emergency') ? 'text-[#ff9c9c]' : ''}>• {t}</li>)}
+                  {tasks.length === 0 && <li className="text-[#7bd5b8]">Nothing waiting.</li>}
+                </ul>
+              </div>
+            </div>
+          </Panel>
           <MissionTimeline mission={p.mission} />
           <Panel title="WHERE AND WHAT, RIGHT NOW">
             <p className="text-base text-marble">{p.link.connected ? '' : 'Last known: '}{p.link.location} · {p.link.eva ? 'on EVA' : 'inside the spacecraft'} · {p.link.activity}</p>

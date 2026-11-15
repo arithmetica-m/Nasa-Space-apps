@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BatteryLow, BookOpen, GraduationCap, Map, Mic, Settings, ShieldCheck, Siren, VolumeX, Watch, WifiOff } from 'lucide-react';
+import { BatteryLow, BookOpen, HeartPulse, Lock, MapPin, GraduationCap, Map, Mic, Settings, ShieldCheck, Siren, VolumeX, Watch, WifiOff } from 'lucide-react';
 import type { Mission } from '../types';
 import type { CrewMember } from '../emergency/types';
 import { crewSummary, statusColor, statusLabel, type CrewHealth } from '../lib/crewHealth';
 import { ago, type LinkStatus } from '../link/link';
-import { MissionTimeline } from './MissionTimeline';
+import { phaseOf, whereIs } from './MissionTimeline';
 import { MissionDial } from './SystemMap';
 import { Avatar } from './Avatar';
 
-export type Page = 'home' | 'profile' | 'train' | 'respond' | 'link' | 'roadmap' | 'nasa' | 'demo';
+export type Page = 'home' | 'profile' | 'train' | 'respond' | 'link' | 'roadmap' | 'nasa' | 'demo' | 'medical' | 'mission';
+export type MedicalPart = 'prevent' | 'train' | 'respond' | 'recover';
 export const PAGE_NAME: Record<Page, string> = {
-  home: 'Crew', profile: 'Astronaut', train: 'Prepare · prevent and train',
+  home: 'Crew', profile: 'Astronaut', train: 'Medical system', medical: 'Medical system', mission: 'Mission',
   respond: 'Respond · emergency support', link: 'CHIRON LINK · wearables', roadmap: 'About CHIRON', nasa: 'NASA data in CHIRON', demo: 'Demonstration',
 };
 
@@ -36,6 +37,10 @@ interface HeaderProps {
   onLibrary: () => void;
   onRoadmap: () => void;
   onOpen: (p: Page) => void;
+  unlocked: boolean;
+  onLock: () => void;
+  onMyProfile: () => void;
+  ownProfile: boolean;   // the profile on screen is the signed-in person's own
 }
 
 // CHIRON CORE header: the same on every screen.
@@ -94,7 +99,8 @@ export function CoreHeader(p: HeaderProps) {
                   className="mt-1 min-h-11 w-full border border-marble/20 bg-void px-2 text-sm text-marble">
                   {p.crew.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
-                <p className="mt-1 text-[11px] text-marble/40">Switching is for the demo only.</p>
+                <p className="mt-1 text-[11px] text-marble/40">Switching is for the demo only. Each person has their own PIN.</p>
+                {p.unlocked && <button type="button" onClick={() => { setMenu(false); p.onLock(); }} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 border border-marble/15 text-sm text-marble/80 hover:border-gold/60"><Lock size={14} /> Lock medical profiles</button>}
                 <button type="button" onClick={() => { setMenu(false); p.onOpen('demo'); }} className="mt-3 min-h-11 w-full bg-gold/90 font-mono text-xs tracking-[0.18em] text-void hover:bg-gold">▶ DEMONSTRATION</button>
                 <button type="button" onClick={() => { setMenu(false); p.onRoadmap(); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">About CHIRON and roadmap</button>
                 <button type="button" onClick={() => { setMenu(false); p.onOpen('nasa'); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">NASA data in CHIRON</button>
@@ -105,16 +111,46 @@ export function CoreHeader(p: HeaderProps) {
           </div>
         </div>
       </div>
-      {p.page !== 'home' && (
-        <button type="button" onClick={p.onHome} className="mt-3 flex min-h-11 items-center gap-2 font-mono text-xs tracking-[0.15em] text-marble/70 hover:text-marble">
-          <ArrowLeft size={16} /> CREW HOME <span className="text-marble/40">/ {PAGE_NAME[p.page].toUpperCase()}</span>
-        </button>
-      )}
+      <nav aria-label="Main sections" className="mt-2 flex gap-1 overflow-x-auto border-b border-marble/10">
+        {([
+          ['DASHBOARD', p.page === 'home', p.onHome],
+          ['MY PROFILE', p.page === 'profile' && p.ownProfile, p.onMyProfile],
+          ['CHIRON LINK', p.page === 'link', () => p.onOpen('link')],
+          ['MEDICAL SYSTEM', p.page === 'medical' || p.page === 'train' || p.page === 'respond', () => p.onOpen('medical')],
+          ['MISSION', p.page === 'mission', () => p.onOpen('mission')],
+        ] as const).map(([label, active, go]) => (
+          <button key={label} type="button" onClick={go} aria-current={active ? 'page' : undefined}
+            className={`min-h-12 shrink-0 px-4 font-mono text-xs tracking-[0.18em] ${active ? 'border-b-2 border-gold text-gold' : 'text-marble/65 hover:text-marble'}`}>{label}</button>
+        ))}
+      </nav>
     </header>
   );
 }
 
 export const roleOf = (m: CrewMember) => m.position.split(' · ').pop()!.toUpperCase();
+
+const PARTS: [MedicalPart, string, string, typeof Siren][] = [
+  ['prevent', 'PREVENT', 'Health and risk', ShieldCheck],
+  ['train', 'TRAIN', 'Medical training', GraduationCap],
+  ['respond', 'RESPOND', 'Emergency support', Siren],
+  ['recover', 'RECOVER', 'Back to your normal', HeartPulse],
+];
+
+export function MedicalTiles({ lines, onOpen }: { lines: Record<MedicalPart, string>; onOpen: (p: MedicalPart) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {PARTS.map(([id, name, sub, Icon]) => (
+        <button key={id} type="button" onClick={() => onOpen(id)}
+          className={`flex min-h-[130px] flex-col border bg-void/75 p-4 text-left backdrop-blur-md hover:bg-void/90 ${id === 'respond' ? 'border-[#e45b5b]/40 hover:border-[#e45b5b]' : 'border-marble/10 hover:border-gold/60'}`}>
+          <Icon size={24} className={id === 'respond' ? 'text-[#ff8585]' : 'text-gold'} />
+          <span className="mt-2 font-serif text-xl tracking-[0.2em] text-marble">{name}</span>
+          <span className="text-sm text-marble/55">{sub}</span>
+          <span className="mt-auto pt-2 text-base text-marble/85">{lines[id]}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 interface HomeProps {
   mission: Mission;
@@ -123,15 +159,17 @@ interface HomeProps {
   health: Record<string, CrewHealth>;
   links: Record<string, LinkStatus>;
   now: number;
-  tiles: Record<'train' | 'respond', string>;
+  tiles: Record<MedicalPart, string>;
+  onMedical: (p: MedicalPart) => void;
   onProfile: (id: string) => void;
   onPage: (p: Page) => void;
   checkedIn: boolean;
   onCheckIn: () => void;
+  medical: boolean;   // the signed-in person is a medical officer
 }
 
 // HOME: who is on board, how the crew is doing, and what CHIRON can do to help.
-export function HomePage({ mission, crew, account, health, links, now, tiles, onProfile, onPage, checkedIn, onCheckIn }: HomeProps) {
+export function HomePage({ mission, crew, account, health, links, now, tiles, onMedical, onProfile, onPage, checkedIn, onCheckIn, medical }: HomeProps) {
   const bands = Object.values(links);
   const offline = bands.filter((b) => !b.connected);
   const bandAlerts = bands.reduce((n, b) => n + b.alerts.length, 0);
@@ -151,8 +189,8 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
           className="flex min-h-16 w-full flex-wrap items-center justify-between gap-3 border-2 border-[#e45b5b] bg-[#e45b5b]/15 px-5 py-2 text-left backdrop-blur-md hover:bg-[#e45b5b]/25">
           <span>
             <span className="block font-mono text-xs tracking-[0.2em] text-[#ff8585]"><Watch size={14} className="mr-1 inline" /> LINK WARNING · {ago(w.t, now).toUpperCase()}</span>
-            <span className="block text-lg text-marble">{crew.find((c) => c.id === b.crewId)?.name}: {w.label.toLowerCase()} {w.value}{w.unit === '%' ? '%' : ` ${w.unit}`}</span>
-            <span className="block text-sm text-marble/60">Prototype rule: {w.rule}</span>
+            <span className="block text-lg text-marble">{crew.find((c) => c.id === b.crewId)?.name}{medical || b.crewId === account ? `: ${w.label.toLowerCase()} ${w.value}${w.unit === '%' ? '%' : ` ${w.unit}`}` : ' needs a check'}</span>
+            {(medical || b.crewId === account) && <span className="block text-sm text-marble/60">Prototype rule: {w.rule}</span>}
           </span>
           <span className="font-mono text-xs tracking-[0.2em] text-[#ff8585]">OPEN DASHBOARD</span>
         </button>
@@ -171,11 +209,10 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
           const h = health[m.id];
           const l = links[m.id];
           const color = statusColor[h.status];
-          const hr = l.readings.find((r) => r.key === 'hr');
           const alerts = l.alerts.length + (h.status === 'attention' ? 1 : 0);
           return (
             <button key={m.id} type="button" onClick={() => onProfile(m.id)}
-              aria-label={`${m.name}, ${statusLabel[h.status]}, ${h.comment}. Open medical dashboard.`}
+              aria-label={`${m.name}, ${statusLabel[h.status]}. Open profile.`}
               className="flex min-h-[170px] flex-col border border-marble/10 bg-void/75 p-5 text-left backdrop-blur-md transition hover:border-gold/60 hover:bg-void/90"
               style={{ borderTop: `4px solid ${color}` }}>
               <div className="flex items-center gap-3">
@@ -189,14 +226,13 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
                 {alerts > 0 && <span className="shrink-0 bg-[#e39b4b] px-2 py-0.5 font-mono text-[11px] text-void" title="Active alerts">{alerts} ALERT{alerts > 1 ? 'S' : ''}</span>}
               </div>
               <div className="mt-4 font-serif text-2xl font-bold tracking-[0.1em]" style={{ color }}>{statusLabel[h.status]}</div>
-              <div className="mt-1 text-sm tracking-[0.06em] text-marble/80">{h.comment}</div>
+              <div className="mt-1 flex items-center gap-1.5 text-sm tracking-[0.06em] text-marble/60">{m.id === account ? h.comment : /EMERGENCY/.test(h.comment) ? h.comment : <><Lock size={13} /> DETAILS PRIVATE</>}</div>
               <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 font-mono text-[11px] tracking-[0.1em]">
                 <span className={l.connected ? 'text-marble/60' : 'text-[#e39b4b]'}>
                   <Watch size={12} className="mr-1 inline" />
                   {l.connected ? `LINK ON · ${l.battery}%` : `LINK OFFLINE ${ago(l.lastSync, now).toUpperCase()}`}
                   {l.connected && l.battery < 25 && <BatteryLow size={12} className="ml-1 inline text-[#e39b4b]" />}
                 </span>
-                {hr?.value !== undefined && l.connected && <span className="text-marble/60">HR {hr.value} · {ago(hr.t!, now).toUpperCase()}</span>}
                 <span className={h.status === 'nodata' ? 'text-[#e39b4b]' : 'text-marble/45'}>{m.id === account && !checkedIn ? 'CHECK-IN DUE TODAY' : h.daysSinceLog === undefined ? 'NO CHECK-INS' : h.daysSinceLog === 0 ? 'CHECKED IN TODAY' : `CHECK-IN ${h.daysSinceLog}D AGO`}</span>
               </div>
             </button>
@@ -214,24 +250,17 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
       </button>
 
       <section aria-labelledby="help-title">
-        <h2 id="help-title" className="mb-2 font-mono text-[11px] tracking-[0.25em] text-gold">WHAT CAN CHIRON DO TO HELP?</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {([
-            ['train', 'PREPARE', 'PREVENT + TRAIN', GraduationCap],
-            ['respond', 'RESPOND', 'Emergency support', Siren],
-          ] as const).map(([id, name, sub, Icon]) => (
-            <button key={id} type="button" onClick={() => onPage(id)}
-              className={`flex min-h-[120px] flex-col border bg-void/75 p-4 text-left backdrop-blur-md hover:bg-void/90 ${id === 'respond' ? 'border-[#e45b5b]/40 hover:border-[#e45b5b]' : 'border-marble/10 hover:border-gold/60'}`}>
-              <Icon size={22} className={id === 'respond' ? 'text-[#ff8585]' : 'text-gold'} />
-              <span className="mt-2 font-serif text-xl tracking-[0.2em] text-marble">{name}</span>
-              <span className="text-sm text-marble/55">{sub}</span>
-              <span className="mt-auto pt-2 text-base text-marble/85">{tiles[id]}</span>
-            </button>
-          ))}
-        </div>
+        <h2 id="help-title" className="mb-2 font-mono text-[11px] tracking-[0.25em] text-gold">MEDICAL SYSTEM</h2>
+        <MedicalTiles lines={tiles} onOpen={onMedical} />
       </section>
 
-      <MissionTimeline mission={mission} />
+      <button type="button" onClick={() => onPage('mission')}
+        className="flex min-h-14 w-full flex-wrap items-center gap-x-6 gap-y-1 border border-marble/10 bg-void/75 px-5 py-3 text-left backdrop-blur-md hover:border-gold/60">
+        <span className="flex items-center gap-2 font-mono text-xs tracking-[0.2em] text-gold"><MapPin size={16} /> MISSION</span>
+        <span className="text-sm text-marble">{whereIs(mission)}</span>
+        <span className="text-sm text-marble/70">{phaseOf(mission)} · day {mission.today} of {mission.totalDays}</span>
+        <span className="ml-auto font-mono text-xs tracking-[0.2em] text-marble/50">OPEN</span>
+      </button>
       <nav aria-label="About this prototype" className="flex flex-wrap gap-2">
         <button type="button" onClick={() => onPage('demo')} className="min-h-12 bg-gold px-5 font-mono text-xs tracking-[0.18em] text-void hover:bg-marble">▶ DEMONSTRATION</button>
         <button type="button" onClick={() => onPage('nasa')} className="min-h-12 border border-gold/60 bg-void/75 px-5 font-mono text-xs tracking-[0.18em] text-gold hover:bg-gold/10">NASA DATA IN CHIRON</button>

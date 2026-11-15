@@ -17,15 +17,41 @@ interface Props {
   crewId: string;
   records: DayRecord[];
   startPart?: BodyPart;
+  startText?: string;
   onClose: () => void;
   onEmergency: () => void;
 }
 
+// LIKELY CAUSES: for a symptom, what CHIRON thinks is most likely, from the person's own
+// readings and medical record, before any questions are asked.
+export function LikelyCauses({ symptom, crewId, records, onAsk }: { symptom: string; crewId: string; records: DayRecord[]; onAsk?: () => void }) {
+  const ranked = useMemo(() => score(categoriesFor(symptom, []), {}, crewId, records).slice(0, 3), [symptom, crewId, records]);
+  if (!ranked.length) return null;
+  return (
+    <div className="border-l-4 border-gold bg-gold/[0.06] px-4 py-3">
+      <div className="font-mono text-xs tracking-[0.18em] text-gold">MOST LIKELY CAUSES FOR YOU</div>
+      <ol className="mt-2 space-y-2">
+        {ranked.map((r, i) => {
+          const personal = r.why.slice(1).map((w) => w.replace(/^[+-][\d.]+: /, '').replace(/\.$/, ''));
+          return (
+            <li key={r.cause.id} className="text-lg text-marble">
+              <span className={i === 0 ? 'font-semibold' : 'text-marble/80'}>{i + 1}. {r.cause.name}</span>
+              {personal.length > 0 && <span className="block text-base text-[#f3c28d]">Because {personal.join('; ')}.</span>}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-2 text-sm text-marble/55">From your readings, your medical record and the medical library. The medical officer confirms.</p>
+      {onAsk && <button type="button" onClick={onAsk} className="mt-2 min-h-12 border border-gold/60 px-4 font-mono text-xs tracking-[0.18em] text-gold hover:bg-gold/10">ANSWER A FEW QUESTIONS TO NARROW IT DOWN</button>}
+    </div>
+  );
+}
+
 // REPORT SOMETHING: describe it in your own words, or point at the body. CHIRON asks
 // follow-up questions only when they help tell the possible causes apart.
-export function ReportSomething({ crewId, records, startPart, onClose, onEmergency }: Props) {
+export function ReportSomething({ crewId, records, startPart, startText, onClose, onEmergency }: Props) {
   const { entries } = useLibrary();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(startText ?? '');
   const [parts, setParts] = useState<BodyPart[]>(startPart ? [startPart] : []);
   const [step, setStep] = useState<'describe' | 'ask' | 'result'>('describe');
   const [answers, setAnswers] = useState<Record<string, string>>({});

@@ -27,11 +27,12 @@ interface Props {
   kb: Procedure[];
   onGuide: (id: string) => void;
   onStock: () => void;
+  focus: 'prevent' | 'train';
 }
 
 // PREPARE: get ready before something goes wrong. Gaps found in the readiness simulation
 // become practice and actions; personal advice is shown only to the signed-in astronaut.
-export function TrainPage({ mission, crew, account, records, kb, onGuide, onStock }: Props) {
+export function TrainPage({ mission, crew, account, records, kb, onGuide, onStock, focus }: Props) {
   const [practice, setPractice] = useState<string>();   // skill id being practised
   const [version, setVersion] = useState(0);            // refresh after a practice is saved
   const me = crew.find((c) => c.id === account)!;
@@ -51,7 +52,8 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
   }
 
   return (
-    <PageShell title="PREPARE">
+    <PageShell title={focus === 'prevent' ? 'PREVENT' : 'TRAIN'}>
+      {focus === 'prevent' && <>
       {next && prep && (
         <Panel title={`${next.title.toUpperCase()} IN ${next.day - mission.today} DAYS`}>
           <h3 className="font-mono text-xs tracking-[0.2em] text-gold">WHAT TO DO TO BE READY</h3>
@@ -104,6 +106,9 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
         </div>
       </Panel>
 
+      </>}
+
+      {focus === 'train' && <>
       <Panel title={`YOUR REFRESHERS, ${me.name.split(' ')[0].toUpperCase()}`}>
         <ul className="space-y-2">
           {mine.filter((s) => s.due).slice(0, 3).map((s) => (
@@ -172,6 +177,7 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
           <p className="mt-2 text-sm text-marble/55">Days since last practice. Demo rule: medical crew every 60 days, others every 120.</p>
         </div>
       </details>
+      </>}
     </PageShell>
   );
 }
@@ -226,7 +232,7 @@ function Practice({ protocol, all, scenario, onDone, onClose }: { protocol: Proc
           <div className="mt-4">
             <h2 className="text-2xl text-marble">Score: {score} of {quiz.length}</h2>
             <p className="mt-1 text-base text-marble/70">{score === quiz.length ? 'All steps in the right order.' : 'Review the steps you missed in the library, then try again.'} Saved.</p>
-            <button type="button" onClick={onClose} className="mt-4 min-h-12 bg-gold px-6 font-mono text-xs tracking-[0.2em] text-void">BACK TO PREPARE</button>
+            <button type="button" onClick={onClose} className="mt-4 min-h-12 bg-gold px-6 font-mono text-xs tracking-[0.2em] text-void">BACK</button>
           </div>
         )}
       </Panel>
