@@ -5,6 +5,7 @@ import { indicators } from '../../data/indicators';
 import { outsideness } from '../../data/simulate';
 import { latestValue } from '../../lib/health';
 import { readiness } from '../../prevent/readiness';
+import { WARNING_RULES } from '../../link/link';
 import { useLog } from '../../emergency/sync';
 import type { CrewMember, Procedure } from '../../emergency/types';
 import { procedures as guides } from '../../data/procedures';
@@ -42,7 +43,7 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
   const sim = useMemo(() => readiness(kb, mission.id, log), [kb, mission.id, version, log]);
   // Any approved protocol can be practised, even one not needed on this mission.
   const approved = (cat: string) => kb.find((p) => p.category === cat && p.status === 'approved' && p.steps.length);
-  const next = mission.milestones.find((m) => m.day > mission.today && m.day - mission.today <= 60);
+  const next = mission.milestones.find((m) => m.day > mission.today);
   const prep = next && EVENT_PREP.find((e) => e.match.test(next.title));
   const myConcerns = prep ? indicators.filter((i) => prep.systems.includes(i.system)).filter((ind) => { const l = latestValue(records, ind.id); return l && outsideness(ind, l.value) > 0.05; }) : [];
 
@@ -56,6 +57,47 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
   return (
     <PageShell title={focus === 'prevent' ? 'PREVENT' : 'TRAIN'}>
       {focus === 'prevent' && <>
+      <p className="max-w-3xl text-base text-marble/70">PREVENT watches each astronaut’s readings against their own normal and gets the crew ready before the next mission event, so problems are caught early.</p>
+
+      {/* Your readings against your own normal: private, so only for the signed-in astronaut. */}
+      <Panel title={me ? `YOUR READINGS, ${me.name.split(' ')[0].toUpperCase()}` : 'YOUR READINGS'} tag="SIMULATED">
+        {!me ? <p className="text-lg text-marble/80">Your readings are private. Choose your profile on the dashboard and enter your PIN to see them here.</p> : (
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {indicators
+              .map((ind) => { const l = latestValue(records, ind.id); return { ind, l, out: l ? outsideness(ind, l.value) > 0.05 : false }; })
+              // The six main readings, plus anything outside normal. Problems first.
+              .filter((x) => x.out || ['hr', 'bp_sys', 'glucose', 'temp', 'sleep_h', 'mood'].includes(x.ind.id))
+              .sort((a, b) => Number(b.out) - Number(a.out))
+              .map(({ ind, l, out }) => {
+              const dir = l && out ? (l.value > ind.baseline[1] ? 'Higher than your normal' : 'Lower than your normal') : 'Within your normal';
+              return (
+                <li key={ind.id} className={`border p-3 ${!l ? 'border-marble/10' : out ? 'border-[#e39b4b]/60 bg-[#e39b4b]/[0.05]' : 'border-[#5cc8a8]/30'}`}>
+                  <div className="text-base text-marble">{ind.name}</div>
+                  <div className="font-mono text-xl text-marble">{l ? `${l.value} ${ind.unit}` : '—'}</div>
+                  <div className={`text-sm ${!l ? 'text-marble/50' : out ? 'text-[#f3c28d]' : 'text-[#7bd5b8]'}`}>{l ? dir : 'No reading yet'}</div>
+                  <div className="text-xs text-marble/45">Your normal: {ind.baseline[0]}–{ind.baseline[1]} {ind.unit}</div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel title="WHAT TRIGGERS A WARNING" tag="SIMULATED">
+        <ul className="space-y-2">
+          <li className="border-l-2 border-gold pl-3 text-lg text-marble">A reading outside the astronaut’s own normal, approved by the flight surgeon.</li>
+          {WARNING_RULES.map((w) => <li key={w.key} className="border-l-2 border-gold pl-3 text-lg text-marble">LINK band: {w.rule}.</li>)}
+          <li className="border-l-2 border-gold pl-3 text-lg text-marble">Any symptom the astronaut reports, even when the sensors look normal.</li>
+          <li className="border-l-2 border-gold pl-3 text-lg text-marble">No check-in or no band data for too long: shown as missing, never guessed.</li>
+        </ul>
+        <p className="mt-2 text-sm text-marble/55">Demo rules for this prototype, not approved medical limits.</p>
+      </Panel>
+
+      {next && !prep && (
+        <Panel title={`NEXT: ${next.title.toUpperCase()} IN ${next.day - mission.today} DAYS`}>
+          <p className="text-lg text-marble">{next.health}</p>
+        </Panel>
+      )}
       {next && prep && (
         <Panel title={`${next.title.toUpperCase()} IN ${next.day - mission.today} DAYS`}>
           <h3 className="font-mono text-xs tracking-[0.2em] text-gold">WHAT TO DO TO BE READY</h3>
