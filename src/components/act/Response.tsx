@@ -89,7 +89,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const [showHandover, setShowHandover] = useState(false);
   // Every crew member's LINK band (simulated), for measurements, locations and task delivery.
   const links = useMemo(() => (c ? Object.fromEntries(crew.map((m) => [m.id, withLinkEvents(linkFor(m.id, recordsFor(missions[c.mission], m.id), now), log)])) : {}), [c?.mission, now, log]);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const reports = c ? c.messages.filter((m) => m.report) : [];
   const lastReport = reports[reports.length - 1];
   const sig = c ? reportSignature(c) : '';
@@ -178,6 +178,9 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const doneSteps = plan.tasks.filter((t) => t.status === 'done' || t.status === 'cannot').length;
   const textOf = (t: { step: { text: string; ask?: { question: string } } }) => t.step.ask?.question ?? t.step.text;
 
+  const patientMed = medicalOf(c.patientId);
+  const recordText = [...patientMed.allergies, ...patientMed.history, ...patientMed.medications, ...patientMed.restrictions].join(' ').toLowerCase();
+  const lastChange = Math.max(c.startedAt, ...Object.values(c.outcomes).map((o) => o.t), ...c.measures.map((m) => m.t), ...c.vitals.map((v) => (v as { t?: number }).t ?? 0));
   const happening = situation(c, plan, states, log, links[c.patientId]);
 
   // Voice: done / yes / no / can't / repeat / confirm act on this device's own step.
@@ -251,7 +254,8 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
                   <ol className="divide-y divide-marble/10">
                     {theirs.map((t, i) => {
                       const fin = t.status === 'done' || t.status === 'cannot';
-                      const now = t === l.current && t.status === 'ready';
+                      const now = t === l.current && (t.status === 'ready' || t.status === 'blocked');
+                      const canDo = now && t.status === 'ready';
                       const confirm = now && t.step.verify === 'clinical' && !c.verified.has(t.step.id);
                       const act = (outcome: 'done' | 'cannot' | 'yes' | 'no') => publish({ type: 'step', eid, by: l.member.id, stepId: t.step.id, outcome });
                       return (
@@ -260,12 +264,21 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
                             <span className={`flex h-9 w-9 shrink-0 items-center justify-center border-2 text-lg font-bold ${fin ? 'border-[#5cc8a8] bg-[#5cc8a8]/20 text-[#7bd5b8]' : now ? 'border-[#e45b5b] text-[#ff8585]' : 'border-marble/30 text-marble/50'}`}>{fin ? <Check size={20} strokeWidth={3} /> : i + 1}</span>
                             <p className={`text-2xl leading-snug ${fin ? 'text-marble/45 line-through' : now ? 'font-semibold text-marble' : 'text-marble/75'}`}>{textOf(t)}</p>
                           </div>
-                          {t.status === 'cannot' && <p className="mt-1 pl-12 text-lg text-[#f3c28d]">Could not do this</p>}
+                          {!fin && t.step.checks && (
+                            <ul className="mt-2 space-y-1 pl-12 text-xl text-marble/85">{t.step.checks.map((x) => <li key={x}>☐ {x}</li>)}</ul>
+                          )}
+                          {!fin && (t.step.personal ?? []).filter((r) => r.match.some((w) => recordText.includes(w))).map((r) => (
+                            <p key={r.note} className="mt-2 ml-12 border-l-4 border-[#8fb8ff] bg-[#8fb8ff]/10 px-3 py-2 text-xl text-[#d7e4ff]">For {plan.patient.name.split(' ')[0]}: {r.note}</p>
+                          ))}
+                          {now && t.step.source && <p className="mt-1 pl-12 text-sm text-marble/45">Follows: {t.step.source.label}</p>}
+                          {t.status === 'cannot' && <p className="mt-1 pl-12 text-lg text-[#f3c28d]">Could not do this. Backup: {t.step.ifCannot}</p>}
                           {t.status === 'blocked' && <p className="mt-1 pl-12 text-lg text-[#ff9c9c]">Missing equipment: {t.blockedBy ?? 'ask the medical lead'}</p>}
                           {t.status === 'waiting' && t === l.current && <p className="mt-1 pl-12 text-lg text-marble/55">Waits for another step</p>}
                           {now && (
                             <div className="mt-3 grid gap-2 pl-12">
-                              {t.step.ask ? (
+                              {t.status === 'blocked' ? (
+                                <p className="text-lg text-[#ff9c9c]">This step is blocked by unavailable equipment. Do not substitute an unlisted item. Record that it cannot be done to reveal the procedure’s backup plan.</p>
+                              ) : t.step.ask ? (
                                 <div className="grid grid-cols-2 gap-2">
                                   <button onClick={() => act('yes')} className="min-h-16 border-2 border-marble/50 bg-marble/[0.06] text-2xl font-semibold text-marble">YES</button>
                                   <button onClick={() => act('no')} className="min-h-16 border-2 border-marble/50 bg-marble/[0.06] text-2xl font-semibold text-marble">NO</button>
@@ -279,10 +292,10 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
                               )}
                               {cannot === t.step.id ? (
                                 <div className="border-2 border-[#e39b4b]/70 bg-[#e39b4b]/10 p-3">
-                                  <p className="text-xl text-marble">{t.step.ifCannot ?? 'Tell the medical lead.'}</p>
-                                  <button onClick={() => { act('cannot'); setCannot(undefined); }} className="mt-2 min-h-14 w-full bg-[#e39b4b] text-lg font-semibold text-[#17100a]">RECORD AND GO ON</button>
+                                  <p className="text-xl text-marble">{t.step.ifCannot}</p>
+                                  <button onClick={() => { act('cannot'); setCannot(undefined); }} className="mt-2 min-h-14 w-full bg-[#e39b4b] text-lg font-semibold text-[#17100a]">RECORD AND SHOW BACKUP PLAN</button>
                                 </div>
-                              ) : <button onClick={() => setCannot(t.step.id)} className="min-h-12 border-2 border-marble/25 text-lg text-marble/75">CAN’T DO THIS</button>}
+                              ) : (canDo || t.status === 'blocked') && <button onClick={() => setCannot(t.step.id)} className="min-h-12 border-2 border-marble/25 text-lg text-marble/75">CAN’T DO THIS</button>}
                             </div>
                           )}
                         </li>
@@ -292,7 +305,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
                 </section>
               );
             })}
-            {assigned.length === 0 && <p className="text-2xl text-marble/80">No tasks: CHIRON has no approved procedure for this. Use the paper emergency card.</p>}
+            {assigned.length === 0 && <p className="text-2xl text-marble/80">No tasks: this demo library has no procedure for this event. Use the mission emergency card and activate the medical response.</p>}
           </div>
 
           <h2 className="pt-2 text-2xl font-semibold text-marble">NOT ASSIGNED</h2>
@@ -307,6 +320,11 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
             {others.length === 0 && <li className="text-xl text-marble/60">Everyone has a task.</li>}
           </ul>
 
+          {plan.procedure && (
+            <p className="text-base text-marble/55">
+              Demo library: {plan.procedure.title} v{plan.procedure.version}. Follow-up tasks appear from recorded answers. Published sources: {[...new Map(plan.procedure.steps.filter((x) => x.source).map((x) => [x.source!.url, x.source!])).values()].map((src, i) => <span key={src.url}>{i > 0 && ', '}<a href={src.url} target="_blank" rel="noreferrer" className="text-gold underline underline-offset-2">{src.label}</a></span>)}. Demonstration only—not a flight-approved medical protocol.
+            </p>
+          )}
           <details className="border border-marble/15">
             <summary className="min-h-14 cursor-pointer px-4 py-3 text-xl text-marble/85">Change who does what</summary>
             <div className="border-t border-marble/10 p-4"><CrewRoles eid={eid} account={account} plan={plan} c={c} links={links} log={log} /></div>
@@ -333,7 +351,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-lg text-marble/60">Crew steps done: {doneSteps} of {plan.tasks.length}</p>
+          <p className="mt-2 text-lg text-marble/60">Crew steps done: {doneSteps} of {plan.tasks.length} · last change {new Date(lastChange).toISOString().slice(11, 19)} GMT · updates by itself on every device</p>
         </section>
 
         <section aria-label="Live health measurements">
@@ -348,17 +366,16 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
                     <div className="text-base text-marble/60">{s.t ? hm(s.t) : ''} · {s.live ? 'LINK band, live (simulated)' : s.source}</div>
                     {s.live && <button type="button" onClick={() => publish({ type: 'measure', eid, by: account, key: s.m.key, value: s.value!, source: 'link' })} className="mt-1 min-h-11 border border-gold/60 px-3 text-base text-gold">Save to the record</button>}
                   </>
-                ) : (
-                  <>
-                    <div className="text-2xl font-bold text-[#f3c28d]">NOT AVAILABLE</div>
-                    <div className="mt-1 flex gap-1">
-                      <input value={draft[s.m.key] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, [s.m.key]: e.target.value }))} aria-label={s.m.label} placeholder={s.m.unit ?? 'value'}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && (draft[s.m.key] ?? '').trim()) { publish({ type: 'measure', eid, by: account, key: s.m.key, value: draft[s.m.key].trim(), source: 'manual' }); setDraft((d) => ({ ...d, [s.m.key]: '' })); } }}
-                        className="min-h-12 w-full min-w-0 border-2 border-marble/30 bg-transparent px-2 text-xl text-marble" />
-                      <button type="button" disabled={!(draft[s.m.key] ?? '').trim()} onClick={() => { publish({ type: 'measure', eid, by: account, key: s.m.key, value: draft[s.m.key].trim(), source: 'manual' }); setDraft((d) => ({ ...d, [s.m.key]: '' })); }}
-                        className="min-h-12 shrink-0 bg-gold px-3 text-lg font-semibold text-void disabled:opacity-40">SAVE</button>
-                    </div>
-                  </>
+                ) : null}
+                {s.value === undefined && <div className="text-2xl font-bold text-[#f3c28d]">NOT RECORDED</div>}
+                {s.m.source === 'manual' && (
+                  <div className="mt-1 flex gap-1">
+                    <input value={draft[s.m.key] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, [s.m.key]: e.target.value }))} aria-label={s.m.label} placeholder={s.m.unit ?? 'value'}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && (draft[s.m.key] ?? '').trim()) { publish({ type: 'measure', eid, by: account, key: s.m.key, value: draft[s.m.key].trim(), source: 'manual' }); setDraft((d) => ({ ...d, [s.m.key]: '' })); } }}
+                      className="min-h-12 w-full min-w-0 border-2 border-marble/30 bg-transparent px-2 text-xl text-marble" />
+                    <button type="button" disabled={!(draft[s.m.key] ?? '').trim()} onClick={() => { publish({ type: 'measure', eid, by: account, key: s.m.key, value: draft[s.m.key].trim(), source: 'manual' }); setDraft((d) => ({ ...d, [s.m.key]: '' })); }}
+                      className="min-h-12 shrink-0 bg-gold px-3 text-lg font-semibold text-void disabled:opacity-40">{s.value === undefined ? 'SAVE' : 'UPDATE'}</button>
+                  </div>
                 )}
               </li>
             ))}

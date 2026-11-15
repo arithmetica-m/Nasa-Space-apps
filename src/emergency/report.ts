@@ -28,7 +28,14 @@ export interface MedicalSummary { allergies: string[]; medications: string[]; re
 
 // A short fingerprint of everything recorded so far. A new update is sent when it changes.
 export const reportSignature = (c: EmergencyCase) =>
-  `${Object.keys(c.outcomes).length}|${c.vitals.length}|${c.verified.size}|${c.ended ? 1 : 0}`;
+  JSON.stringify({
+    outcomes: c.outcomes,
+    vitals: c.vitals,
+    measures: c.measures,
+    verified: [...c.verified],
+    assignments: c.assignments,
+    ended: c.ended,
+  });
 
 export function buildEarthReport(c: EmergencyCase, plan: Plan, mission: Mission, medical: MedicalSummary, n: number, nextUpdateMin: number, missing: string[] = [], live: string[] = []) {
   const name = (id: string) => crew.find((m) => m.id === id)?.name ?? id;
@@ -81,8 +88,8 @@ export function buildEarthReport(c: EmergencyCase, plan: Plan, mission: Mission,
   lines.push('');
   lines.push('REQUEST TO EARTH');
   lines.push(plan.missing
-    ? '• No approved onboard procedure is loaded for this event. Please send direction.'
-    : '• Please review and send guidance. The crew is following the approved onboard procedure.');
+    ? '• No matching procedure is loaded in the demo library. Please send mission direction.'
+    : '• Please review and send mission guidance. The crew is following a demonstration workflow, not a flight-approved medical protocol.');
   if (!c.ended) lines.push(`• Next automatic update within ${nextUpdateMin} min, or sooner if anything changes.`);
 
   return {

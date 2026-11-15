@@ -10,9 +10,9 @@ import { procedures as guides } from '../data/procedures';
 export interface Skill { id: string; name: string; kind: 'emergency' | 'measurement'; clinical: boolean; protocolId?: string }
 
 export const SKILLS: Skill[] = [
-  { id: 'dcs', name: 'Decompression sickness after EVA', kind: 'emergency', clinical: true, protocolId: 'TRAINING-DCS-01' },
-  { id: 'respiratory', name: 'Breathing or cabin air problem', kind: 'emergency', clinical: true, protocolId: 'TRAINING-RESP-02' },
-  { id: 'anaphylaxis', name: 'Severe allergic reaction', kind: 'emergency', clinical: true, protocolId: 'TRAINING-ALLERGY-03' },
+  { id: 'dcs', name: 'Decompression sickness after EVA', kind: 'emergency', clinical: true, protocolId: 'CHIRON-DCS' },
+  { id: 'respiratory', name: 'Breathing or cabin air problem', kind: 'emergency', clinical: true, protocolId: 'CHIRON-BREATHING' },
+  { id: 'anaphylaxis', name: 'Severe allergic reaction', kind: 'emergency', clinical: true, protocolId: 'CHIRON-ALLERGY' },
   { id: 'behavioral', name: 'Acute psychological distress', kind: 'emergency', clinical: false },
   ...guides.map((g) => ({ id: g.id, name: g.title, kind: 'measurement' as const, clinical: false })),
 ];

@@ -227,7 +227,7 @@ export default function App() {
     if (activeCases.length) return { label: 'EMERGENCY ACTIVE', tone: 'alert', detail: `${activeCases.length} active emergency response(s).` };
     const stock = inventoryNow(log, mission.id);
     const gaps = kb.filter((p) => p.status === 'approved' && p.missions.includes(mission.id)).flatMap((p) => checkResources(p, stock)).filter((c) => !c.ok && !c.alternative);
-    if (gaps.length) return { label: 'CHECK STOCK', tone: 'warn', detail: `Missing for an approved procedure: ${[...new Set(gaps.map((g) => g.name))].join(', ')}.` };
+    if (gaps.length) return { label: 'CHECK STOCK', tone: 'warn', detail: `Missing for a loaded demo procedure: ${[...new Set(gaps.map((g) => g.name))].join(', ')}.` };
     const offline = Object.values(links).filter((l) => !l.connected).length;
     if (offline) return { label: 'LINK OFFLINE', tone: 'warn', detail: `${offline} wearable(s) disconnected.` };
     return { label: 'READY', tone: 'ok', detail: 'Protocols, equipment and wearables ready.' };

@@ -80,7 +80,10 @@ export function situation(c: EmergencyCase, plan: Plan, states: { m: { key: stri
   // What the crew found out by asking and checking.
   for (const t of plan.tasks) {
     const o = c.outcomes[t.step.id];
-    if (t.step.ask && o && (o.outcome === 'yes' || o.outcome === 'no')) out.push({ text: `${t.step.ask.question} ${o.outcome.toUpperCase()}`, tone: 'plain', t: o.t });
+    if (!o) continue;
+    if (t.step.ask && (o.outcome === 'yes' || o.outcome === 'no')) out.push({ text: `${t.step.ask.question} ${o.outcome.toUpperCase()}`, tone: t.step.ask.bad === o.outcome ? 'red' : 'plain', t: o.t });
+    else if (o.outcome === 'done' && t.step.record) out.push({ text: `✓ ${t.step.record}`, tone: 'plain', t: o.t });
+    else if (o.outcome === 'cannot') out.push({ text: `Could not be done: ${t.step.record ?? t.step.text}`, tone: 'amber', t: o.t });
   }
   // Readings, flagged when they break a prototype warning rule.
   for (const st of states) {
@@ -96,5 +99,6 @@ export function situation(c: EmergencyCase, plan: Plan, states: { m: { key: stri
   const unknown = states.filter((st) => st.value === undefined).map((st) => st.m.label);
   if (unknown.length) out.push({ text: `Not known yet: ${unknown.join(', ')}`, tone: 'amber' });
   if (patientLink && !patientLink.connected) out.push({ text: 'No live readings: the LINK band is offline', tone: 'amber' });
-  return out;
+  // Oldest first below the headline, so the story reads top to bottom as it happened.
+  return [out[0], ...out.slice(1).filter((x) => x.t).sort((a, b) => a.t! - b.t!), ...out.slice(1).filter((x) => !x.t)];
 }

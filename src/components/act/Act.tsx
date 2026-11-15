@@ -48,7 +48,7 @@ export function Act({ mission, reason, kb, account, joinEid, patient: initialPat
     // The initial report to Earth is drafted and sent by the response screen (emergency/report.ts).
     publish({ type: 'message', eid: id, by: 'earth', message: {
       id: newId(), direction: 'in', authority: 'medical', title: 'Flight surgeon (SIMULATED for the demo)',
-      body: 'Report received. Continue the approved onboard procedure and send observations every 5 minutes.', sentAt: now + delay + 60_000, arrivesAt: now + 2 * delay + 60_000 } });
+      body: 'Report received. Mission medical review is in progress. Continue the onboard emergency checklist and send observations every 5 minutes.', sentAt: now + delay + 60_000, arrivesAt: now + 2 * delay + 60_000 } });
     setEid(id);
   };
 

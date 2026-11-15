@@ -125,10 +125,17 @@ export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[],
 
   // Surface only an explicit crew report. CHIRON has no approved clinical limits.
   const last = c.vitals[c.vitals.length - 1];
-  if (/worse/i.test(last?.note ?? '')) alerts.unshift('The crew member reports feeling worse. Notify the medical lead and follow mission-authorized instructions.');
+  void last;
 
-  const relevant = (s: Step) => !s.when || c.outcomes[s.when.step]?.outcome === s.when.answer;
-  const decided = (s: Step) => !s.when || !!c.outcomes[s.when.step];
+  const conditions = (s: Step) => s.when ? (Array.isArray(s.when) ? s.when : [s.when]) : [];
+  const relevant = (s: Step) => {
+    const when = conditions(s);
+    return !when.length || when.some((condition) => c.outcomes[condition.step]?.outcome === condition.answer);
+  };
+  const decided = (s: Step) => {
+    const when = conditions(s);
+    return !when.length || relevant(s) || when.every((condition) => !!c.outcomes[condition.step]);
+  };
   const settled = (id: string) => {
     const s = steps.find((step) => step.id === id);
     if (!s) return true;
@@ -138,7 +145,7 @@ export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[],
   };
 
   const tasks: Task[] = steps
-    .filter((step) => decided(step) ? relevant(step) : true)
+    .filter((step) => !step.when || (decided(step) && relevant(step)))
     .map((step) => {
       const o = c.outcomes[step.id]?.outcome;
       const waitingFor = (step.after ?? []).filter((id) => !settled(id));

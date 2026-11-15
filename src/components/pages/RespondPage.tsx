@@ -61,7 +61,7 @@ export function RespondPage({ mission, kb, memory, crewWide, onStart, onJoin }: 
         </Panel>
       )}
 
-      <Panel title="APPROVED EMERGENCY PROCEDURES ON BOARD">
+      <Panel title="ONBOARD EMERGENCY PROCEDURES · DEMO">
         <div className="grid gap-3 md:grid-cols-2">
           {protocols.map((p) => {
             const checks = checkResources(p, stock);
@@ -82,7 +82,7 @@ export function RespondPage({ mission, kb, memory, crewWide, onStart, onJoin }: 
       </Panel>
 
       <Panel title="MEDICAL STOCK PLANNING" tag="SIMULATION (LEVEL 2)">
-        <p className="text-base text-marble">{short.length ? `${short.length} item${short.length > 1 ? 's' : ''} could limit an emergency response.` : 'No shortages found for the approved procedures.'}</p>
+        <p className="text-base text-marble">{short.length ? `${short.length} item${short.length > 1 ? 's' : ''} could limit an emergency response.` : 'No shortages found for the loaded demo procedures.'}</p>
         <ul className="mt-2 divide-y divide-marble/10">
           {plan.filter((x) => x.needs.length).map(({ item, needs, problems, alts }) => (
             <li key={item.id} className="py-2">
@@ -97,8 +97,8 @@ export function RespondPage({ mission, kb, memory, crewWide, onStart, onJoin }: 
           ))}
         </ul>
         <div className="mt-2"><Reasoning steps={[
-          { label: 'DATA USED', lines: ['Simulated medical stock manifest for this mission, with any changes the crew logged.', `Approved procedures for ${mission.name}: ${protocols.map((p) => p.id).join(', ')}.`, `Mission ends around ${missionEnd}.`] },
-          { label: 'RULES', lines: ['Flag an item if a procedure needs it and it is not available, there is less than one use, only one use is left, or it expires before the mission ends.', 'Only alternatives written into an approved procedure are shown. CHIRON never suggests its own substitutes.'] },
+          { label: 'DATA USED', lines: ['Simulated medical stock manifest for this mission, with any changes the crew logged.', `Loaded demo procedures for ${mission.name}: ${protocols.map((p) => p.id).join(', ')}.`, `Mission ends around ${missionEnd}.`] },
+          { label: 'RULES', lines: ['Flag an item if a procedure needs it and it is not available, there is less than one use, only one use is left, or it expires before the mission ends.', 'Only alternatives written into the loaded procedure are shown. CHIRON never invents substitutes.'] },
         ]} /></div>
       </Panel>
 

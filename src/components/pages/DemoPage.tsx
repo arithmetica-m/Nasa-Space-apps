@@ -17,7 +17,7 @@ export function DemoPage({ mission, onAction }: { mission: Mission; onAction: (a
     { n: 3, title: 'THE MONITORING', action: 'monitor', button: 'SEND A LOW OXYGEN READING FROM ANA’S BAND', show: 'CORE home: LINK warning',
       text: 'Ana’s CHIRON LINK band measures blood oxygen 89%. The reading travels to CORE, breaks the warning rule (below 94%), and every device shows a LINK WARNING. Her status becomes MEDICAL ATTENTION.' },
     { n: 4, title: 'THE EMERGENCY', action: 'emergency', button: 'START THE EMERGENCY FOR ANA', show: 'RESPOND with the Response Planner',
-      text: 'The Response Planner connects seven things: Ana’s readings, her medical record, the mission phase, the equipment, the crew’s skills, who is reachable, and the Earth delay. It picks the approved procedure and gives each person a task. Ana is the patient, so Lena, the backup medical officer, leads.' },
+      text: 'The Response Planner connects Ana’s readings, her medical record, the mission phase, equipment, crew skills, availability and Earth delay. It selects a source-cited demo workflow and gives the crew actionable tasks; answers can add follow-up or backup tasks. Ana is the patient, so Lena, the backup medical officer, leads.' },
     { n: 5, title: 'THE COORDINATION', action: 'coordinate', button: 'OPEN CHIRON LINK', show: 'Tasks sent to each band',
       text: 'Each crew member’s band receives their own task, and CHIRON shows whether it was delivered. Ravi’s band is offline, so CHIRON says: tell him in person. Earth gets an automatic private report and updates.' },
     { n: 6, title: 'THE RECOVERY', action: 'recover', button: 'OPEN ANA’S DASHBOARD', show: 'Ana’s checklist and medical log',

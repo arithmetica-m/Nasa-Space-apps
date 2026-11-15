@@ -23,7 +23,12 @@ export interface MeasureState { m: Measurement; value?: string; source?: string;
 
 // What the medical team needs measured, and what is still missing. LINK values count only while the band is live.
 export function measureStates(c: EmergencyCase, plan: Plan, patientLink?: LinkStatus): MeasureState[] {
-  return (plan.procedure?.measurements ?? []).map((m) => {
+  return (plan.procedure?.measurements ?? [])
+    .filter((m) => {
+      const after = m.afterStep ? (Array.isArray(m.afterStep) ? m.afterStep : [m.afterStep]) : [];
+      return !after.length || after.some((stepId) => c.outcomes[stepId]?.outcome === 'done');
+    })
+    .map((m) => {
     const rec = [...c.measures].reverse().find((x) => x.key === m.key);
     if (rec) return { m, value: rec.value, source: rec.source === 'link' ? 'LINK wearable (simulated), added to the record' : `entered by ${nameOf(rec.by)}`, t: rec.t };
     const lr = m.source === 'link' ? patientLink?.readings.find((r) => r.key === m.key) : undefined;
@@ -181,8 +186,8 @@ export function planReasoning(c: EmergencyCase, plan: Plan, states: MeasureState
     ] },
     { label: 'INFORMATION MISSING', lines: states.filter((s) => s.value === undefined).map((s) => s.m.label).concat(plan.tasks.filter((t) => t.step.ask && !c.outcomes[t.step.id]).map((t) => `Not answered: ${t.step.ask!.question}`)).map((x) => `• ${x}`).concat(['Missing information is never estimated.']) },
     { label: 'PROCEDURE CHOSEN', lines: p
-      ? [`Emergency type reported by ${nameOf(c.startedBy)}: ${c.category}.`, `Used: ${p.id} “${p.title}” v${p.version}, the newest APPROVED version for this mission (${p.source.name}).`, 'Drafts and older versions are never used.']
-      : [plan.missing ?? 'No approved procedure.', 'CHIRON will not adapt another procedure on its own.'] },
+      ? [`Emergency type reported by ${nameOf(c.startedBy)}: ${c.category}.`, `Used: ${p.id} “${p.title}” v${p.version}, the newest locally loaded version for this mission (${p.source.name}).`, 'This is a demo workflow, not a flight-approved protocol.']
+      : [plan.missing ?? 'No procedure is loaded for this event.', 'CHIRON will not adapt another procedure on its own.'] },
     { label: 'EQUIPMENT CHECKED', lines: plan.checks.length ? plan.checks.map((ch) => `${ch.name}: ${ch.ok ? 'available' : ch.status}${!ch.ok && ch.alternative ? ` → approved alternative in the procedure: ${ch.alternative.name}` : !ch.ok ? ' → no approved alternative' : ''} (${ch.location})`) : ['No equipment listed.'] },
     { label: 'CREW SUGGESTED', lines: (Object.keys(plan.roles) as RoleId[]).map((r) => `${roleName[r]}: ${plan.roles[r].person?.name ?? 'nobody'}. ${roleReasons(r, plan.roles[r].person, plan, c, links).slice(0, 3).join(' ')}`) },
     { label: 'LIMITATIONS', lines: [
@@ -192,7 +197,7 @@ export function planReasoning(c: EmergencyCase, plan: Plan, states: MeasureState
     ] },
     { label: 'NEEDS MEDICAL CONFIRMATION', lines: [
       ...plan.tasks.filter((t) => t.step.verify === 'clinical').map((t) => `“${t.step.text}” must be confirmed by the medical lead.`),
-      'Any diagnosis or treatment decision: the medical lead or the flight surgeon.',
+      'This demo cannot replace a diagnosis or mission-approved treatment plan.',
     ] },
   ];
 }
@@ -227,7 +232,7 @@ export function PlannerOverview({ c, plan, states, links, phase }: { c: Emergenc
     <section aria-label="Response planner" className="mb-4 border border-gold/30 bg-gold/[0.03] p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-mono text-xs tracking-[0.22em] text-gold">RESPONSE PLANNER</h2>
-        <span className="text-sm text-marble/70">{plan.procedure ? `${plan.procedure.title} v${plan.procedure.version} · ${plan.tasks.length} steps · ${people} people` : 'No approved procedure: use paper instructions'}</span>
+        <span className="text-sm text-marble/70">{plan.procedure ? `${plan.procedure.title} v${plan.procedure.version} · ${plan.tasks.length} steps · ${people} people · demo` : 'No procedure loaded: use mission instructions'}</span>
       </div>
       <ul className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-7">
         {factors.map((f) => (

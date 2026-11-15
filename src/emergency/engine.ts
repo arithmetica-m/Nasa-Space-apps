@@ -14,8 +14,8 @@ export function resolveProcedure(kb: Procedure[], category: Category, mission: M
   return {
     procedure: undefined,
     reason: elsewhere
-      ? 'An approved procedure exists, but not for this mission. CHIRON will not adapt it on its own.'
-      : 'No approved procedure is loaded for this emergency.',
+      ? 'A procedure exists in the demo library, but not for this mission. CHIRON will not adapt it on its own.'
+      : 'No matching procedure is loaded for this emergency.',
   };
 }
 
@@ -95,7 +95,9 @@ export function assignRoles(crew: CrewMember[], patientId: string, category: Cat
 
   const equipment = pick(category === 'dcs' ? ['eva'] : p?.qualifications.equipment ?? []);
   const earth = pick(['comms']);
-  const monitor = pick(category === 'behavioral' ? ['peer-support'] : ['life-support']);
+  const monitor = pick(category === 'behavioral' ? ['peer-support'] : ['life-support'], false)
+    ?? pool.find((c) => c.id !== lead?.id)
+    ?? lead;
 
   // Small crews: non-clinical roles go to helpers first so the medical lead can stay with
   // the patient. Monitoring is close to the patient, so it falls back to the lead.
@@ -104,7 +106,7 @@ export function assignRoles(crew: CrewMember[], patientId: string, category: Cat
     lead: { person: lead, note: leadNote },
     equipment: { person: equipment ?? earth ?? lead, note: equipment ? (category === 'dcs' && has(equipment, ['eva']) ? 'EVA trained, knows the suit and airlock' : 'Nearest free crew member') : 'Covered by another role: small crew' },
     earth: { person: earth ?? helper ?? lead, note: earth ? (has(earth, ['comms']) ? 'Trained on the medical communication link' : 'Free crew member') : 'Covered by a helper: small crew' },
-    monitor: { person: monitor ?? lead, note: monitor ? 'Repeats observations and supports the patient' : 'Covered by the medical lead: small crew' },
+    monitor: { person: monitor, note: monitor && monitor.id !== lead?.id ? 'Repeats observations and supports the patient' : 'Covered by the medical lead: small crew' },
   };
   if (pool.length < 2) warnings.push('Only one crew member is available to help. CHIRON combined all roles.');
   return { roles, warnings };

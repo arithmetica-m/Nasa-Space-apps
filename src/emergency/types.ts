@@ -60,9 +60,15 @@ export interface Step {
   equipment?: string[];
   // 'confirm': the person doing it confirms. 'clinical': the medical lead must verify before moving on.
   verify?: 'confirm' | 'clinical';
-  ask?: { question: string };
-  // Only part of the plan when an earlier question got this answer.
-  when?: { step: string; answer: 'yes' | 'no' };
+  // A question to answer. `bad` is the answer that means the situation is worse.
+  ask?: { question: string; bad?: 'yes' | 'no' };
+  // Only part of the plan once an earlier step got this outcome. This is how new tasks appear:
+  // a follow-up after treatment, or a backup for someone else when a step could not be done.
+  when?: { step: string; answer: 'done' | 'yes' | 'no' | 'cannot' } | { step: string; answer: 'done' | 'yes' | 'no' | 'cannot' }[];
+  checks?: string[];            // exactly what to look at, count or measure
+  record?: string;              // what the patient's status shows once this is done
+  source?: { label: string; url: string };   // the published guidance this step follows
+  personal?: { match: string[]; note: string }[];   // extra instruction when the patient's record mentions these words
   // Steps that must be finished (or not apply) first. No dependency means it can run in parallel.
   after?: string[];
   ifCannot: string;
@@ -85,7 +91,13 @@ export interface Procedure {
   measurements?: Measurement[];
 }
 
-export interface Measurement { key: string; label: string; unit?: string; source: 'link' | 'manual' }
+export interface Measurement {
+  key: string;
+  label: string;
+  unit?: string;
+  source: 'link' | 'manual';
+  afterStep?: string | string[];
+}
 
 export type Authority = 'procedure' | 'medical' | 'chiron';
 export interface EarthMessage {
