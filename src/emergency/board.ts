@@ -80,8 +80,14 @@ export function situation(c: EmergencyCase, plan: Plan, states: { m: { key: stri
 
   const steps = new Map((plan.procedure?.steps ?? []).map((step) => [step.id, step]));
   for (const [stepId, outcome] of Object.entries(c.outcomes)) {
-    const text = steps.get(stepId)?.findings?.[outcome.outcome];
-    if (text) out.push({ text, tone: /no improvement|could not|not improving/i.test(text) ? 'red' : 'plain', t: outcome.t });
+    const step = steps.get(stepId);
+    // Hand-written finding first; otherwise the answer, the treatment recorded, or what could not be done.
+    const text = step?.findings?.[outcome.outcome]
+      ?? (step?.ask && (outcome.outcome === 'yes' || outcome.outcome === 'no') ? `${step.ask.question} ${outcome.outcome.toUpperCase()}`
+        : outcome.outcome === 'done' && step?.record ? `✓ ${step.record}`
+          : outcome.outcome === 'cannot' && step ? `Could not be done: ${step.record ?? step.text}` : undefined);
+    const bad = !!step?.ask?.bad && step.ask.bad === outcome.outcome;
+    if (text) out.push({ text, tone: bad || /no improvement|could not|not improving/i.test(text) ? 'red' : 'plain', t: outcome.t });
   }
 
   const observationGroups: { key: string; labels: string[] }[] = [

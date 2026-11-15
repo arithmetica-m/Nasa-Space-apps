@@ -12,7 +12,7 @@ export function DemoPage({ mission, onAction }: { mission: Mission; onAction: (a
       text: far
         ? `Ana Rocha is the medical officer on ${mission.name}, day ${mission.today}. Earth is ${mission.delayLabel} away each way, there is no evacuation, and the crew is four people. If something goes wrong, the crew must act before Earth can answer.`
         : `Ana Rocha is the medical officer on ${mission.name}. Earth is close today, but on a Mars mission it would be up to 22 minutes away each way. Switch the mission to Mars Transit in settings to see CHIRON change its advice.` },
-    { n: 2, title: 'THE PREPARATION', action: 'prepare', button: 'OPEN PREPARE', show: 'PREPARE (prevent + train)',
+    { n: 2, title: 'THE PREPARATION', action: 'prepare', button: 'OPEN PREVENT', show: 'MEDICAL SYSTEM → PREVENT',
       text: 'CHIRON knows each astronaut’s normal and plays every emergency through with this mission’s protocols, equipment and crew. Each gap becomes an action: “Ana last practised this 130 days ago → practise it now.”' },
     { n: 3, title: 'THE MONITORING', action: 'monitor', button: 'SEND A LOW OXYGEN READING FROM ANA’S BAND', show: 'CORE home: LINK warning',
       text: 'Ana’s CHIRON LINK band measures blood oxygen 89%. The reading travels to CORE, breaks the warning rule (below 94%), and every device shows a LINK WARNING. Her status becomes MEDICAL ATTENTION.' },
@@ -20,7 +20,7 @@ export function DemoPage({ mission, onAction }: { mission: Mission; onAction: (a
       text: 'The Response Planner connects Ana’s readings, her medical record, the mission phase, equipment, crew skills, availability and Earth delay. It selects a source-cited demo workflow and gives the crew actionable tasks; answers can add follow-up or backup tasks. Ana is the patient, so Lena, the backup medical officer, leads.' },
     { n: 5, title: 'THE COORDINATION', action: 'coordinate', button: 'OPEN CHIRON LINK', show: 'Tasks sent to each band',
       text: 'Each crew member’s band receives their own task, and CHIRON shows whether it was delivered. Ravi’s band is offline, so CHIRON says: tell him in person. Earth gets an automatic private report and updates.' },
-    { n: 6, title: 'THE RECOVERY', action: 'recover', button: 'OPEN ANA’S DASHBOARD', show: 'Ana’s checklist and medical log',
+    { n: 6, title: 'THE RECOVERY', action: 'recover', button: 'OPEN ANA’S PROFILE (PIN 1111)', show: 'Ana’s checklist and medical log',
       text: 'After the emergency, Ana’s daily checklist brings her readings back to normal (sleep, light, exercise), and the medical log records everything that happened, for the next medical officer and the flight surgeon.' },
     { n: 7, title: 'THE FUTURE', action: 'future', button: 'OPEN ABOUT CHIRON', show: 'System map and roadmap',
       text: 'What works today, what is simulated, and what comes next: physical LINK hardware, CHIRON VISION in the helmet, and prediction validated by medical teams.' },
@@ -49,7 +49,7 @@ export function DemoPage({ mission, onAction }: { mission: Mission; onAction: (a
           </li>
         ))}
       </ol>
-      <p className="text-sm text-marble/50">All crew, health, wearable and stock data is simulated. Emergency protocols are training scenarios, not NASA-approved procedures.</p>
+      <p className="text-sm text-marble/50">All crew, health, wearable and stock data is simulated. Emergency protocols are demo protocols built from published first-aid guidance, cited on each step. They are not NASA-approved.</p>
     </PageShell>
   );
 }

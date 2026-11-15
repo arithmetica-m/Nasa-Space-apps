@@ -45,7 +45,7 @@ const ROWS: Row[] = [
   {
     kind: 'RESEARCH GAP', source: 'NASA Human Research Roadmap · Medical-401', url: 'https://humanresearchroadmap.nasa.gov/',
     provides: 'Gap: characterize the resource and risk limits of exploration missions to decide which medical capabilities and resources to carry.',
-    need: '4 · Fewer resources · 5 · Risk prediction', feature: 'RESPOND stock planning · PREPARE readiness simulation',
+    need: '4 · Fewer resources · 5 · Risk prediction', feature: 'RESPOND stock planning · PREVENT readiness simulation',
     output: 'CHIRON checks every approved procedure against the mission’s stock: missing items, one use left, items expiring before the mission ends. The readiness simulation lists gaps per emergency.', page: 'train', status: 'USED IN THE PROTOTYPE',
   },
   {
@@ -57,7 +57,7 @@ const ROWS: Row[] = [
   {
     kind: 'CONCEPT OF OPERATIONS', source: 'Earth-Independent Medical Operations (EIMO) ConOps · NTRS 20250000009', url: 'https://ntrs.nasa.gov/citations/20250000009',
     provides: 'Gradual transfer of medical decision-making from Earth to the crew, using reference databases, wearable sensors and training tools for the crew medical officer when Earth is delayed.',
-    need: '2 · Training · 3 · Decision support', feature: 'Medical library · CHIRON LINK · PREPARE practice · Response Planner',
+    need: '2 · Training · 3 · Decision support', feature: 'Medical library · CHIRON LINK · TRAIN practice · Response Planner',
     output: 'Each EIMO element has a CHIRON part: the library is the reference database, LINK is the wearable layer, practice runs use the same approved steps, and the planner works through the communication delay.', page: 'link', status: 'SHAPES THE DESIGN',
   },
   {
@@ -75,13 +75,13 @@ const ROWS: Row[] = [
   {
     kind: 'RESEARCH', source: 'NASA Human Research Program: human spaceflight risks', url: 'https://www.nasa.gov/hrp/risks/',
     provides: 'The hazards of spaceflight (altered gravity, isolation, radiation, distance from Earth, hostile environment) and the health risks they cause.',
-    need: '1 · Personalized medicine · 5 · Risk prediction · 6 · Rehabilitation', feature: 'PREVENT readings · PREPARE event checks · Back-to-normal checklist',
+    need: '1 · Personalized medicine · 5 · Risk prediction · 6 · Rehabilitation', feature: 'PREVENT readings and event checks · RECOVER checklist',
     output: 'Each reading CHIRON tracks is tied to a hazard. Before Mars arrival, CHIRON checks muscles, balance and blood pressure because gravity returns.', page: 'train', status: 'USED IN THE PROTOTYPE',
   },
   {
     kind: 'MODEL', source: 'NASA Integrated Medical Model (IMM)', url: 'https://www.nasa.gov/nasa-integrated-medical-model-imm-overview/',
     provides: 'A probabilistic model of which medical conditions may occur on a mission and what resources they need.',
-    need: '4 · Fewer resources · 5 · Risk prediction', feature: 'PREPARE readiness simulation (future)',
+    need: '4 · Fewer resources · 5 · Risk prediction', feature: 'PREVENT readiness simulation (future)',
     output: 'Today the simulation checks each emergency with fixed rules. A future version could weight emergencies by IMM-style likelihood.', status: 'PROPOSED FUTURE USE',
   },
 ];

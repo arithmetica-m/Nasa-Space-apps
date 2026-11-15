@@ -1,7 +1,9 @@
 {
   "name": "chiron",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "CHIRON: one connected medical support system for astronauts on long missions. NASA Space Apps Challenge 2026.",
+  "engines": { "node": ">=18" },
   "type": "module",
   "scripts": {
     "dev": "vite",

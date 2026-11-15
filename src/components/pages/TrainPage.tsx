@@ -30,7 +30,7 @@ interface Props {
   focus: 'prevent' | 'train';
 }
 
-// PREPARE: get ready before something goes wrong. Gaps found in the readiness simulation
+// PREVENT and TRAIN: get ready before something goes wrong. Gaps found in the readiness simulation
 // become practice and actions; personal advice is shown only to the signed-in astronaut.
 export function TrainPage({ mission, crew, account, records, kb, onGuide, onStock, focus }: Props) {
   const [practice, setPractice] = useState<string>();   // skill id being practised
