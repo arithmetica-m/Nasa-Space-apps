@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BatteryLow, BookOpen, HeartPulse, Lock, MapPin, GraduationCap, Map, Mic, Settings, ShieldCheck, Siren, VolumeX, Watch, WifiOff } from 'lucide-react';
+import { BatteryLow, BookOpen, HeartPulse, Lock, MapPin, UserPlus, GraduationCap, Map, Mic, Settings, ShieldCheck, Siren, VolumeX, Watch, WifiOff } from 'lucide-react';
 import type { Mission } from '../types';
 import type { CrewMember } from '../emergency/types';
 import { crewSummary, statusColor, statusLabel, type CrewHealth } from '../lib/crewHealth';
@@ -37,8 +37,6 @@ interface HeaderProps {
   onLibrary: () => void;
   onRoadmap: () => void;
   onOpen: (p: Page) => void;
-  unlocked: boolean;
-  onLock: () => void;
   onMyProfile: () => void;
   ownProfile: boolean;   // the profile on screen is the signed-in person's own
 }
@@ -99,8 +97,7 @@ export function CoreHeader(p: HeaderProps) {
                   className="mt-1 min-h-11 w-full border border-marble/20 bg-void px-2 text-sm text-marble">
                   {p.crew.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
-                <p className="mt-1 text-[11px] text-marble/40">Switching is for the demo only. Each person has their own PIN.</p>
-                {p.unlocked && <button type="button" onClick={() => { setMenu(false); p.onLock(); }} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 border border-marble/15 text-sm text-marble/80 hover:border-gold/60"><Lock size={14} /> Lock medical profiles</button>}
+                <p className="mt-1 text-[11px] text-marble/40">Switching is for the demo only.</p>
                 <button type="button" onClick={() => { setMenu(false); p.onOpen('demo'); }} className="mt-3 min-h-11 w-full bg-gold/90 font-mono text-xs tracking-[0.18em] text-void hover:bg-gold">▶ DEMONSTRATION</button>
                 <button type="button" onClick={() => { setMenu(false); p.onRoadmap(); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">About CHIRON and roadmap</button>
                 <button type="button" onClick={() => { setMenu(false); p.onOpen('nasa'); }} className="mt-2 min-h-11 w-full border border-marble/15 text-sm text-marble/80 hover:border-gold/60">NASA data in CHIRON</button>
@@ -165,11 +162,11 @@ interface HomeProps {
   onPage: (p: Page) => void;
   checkedIn: boolean;
   onCheckIn: () => void;
-  medical: boolean;   // the signed-in person is a medical officer
+  onAddCrew: () => void;
 }
 
 // HOME: who is on board, how the crew is doing, and what CHIRON can do to help.
-export function HomePage({ mission, crew, account, health, links, now, tiles, onMedical, onProfile, onPage, checkedIn, onCheckIn, medical }: HomeProps) {
+export function HomePage({ mission, crew, account, health, links, now, tiles, onMedical, onProfile, onPage, checkedIn, onCheckIn, onAddCrew }: HomeProps) {
   const bands = Object.values(links);
   const offline = bands.filter((b) => !b.connected);
   const bandAlerts = bands.reduce((n, b) => n + b.alerts.length, 0);
@@ -189,10 +186,9 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
           className="flex min-h-16 w-full flex-wrap items-center justify-between gap-3 border-2 border-[#e45b5b] bg-[#e45b5b]/15 px-5 py-2 text-left backdrop-blur-md hover:bg-[#e45b5b]/25">
           <span>
             <span className="block font-mono text-xs tracking-[0.2em] text-[#ff8585]"><Watch size={14} className="mr-1 inline" /> LINK WARNING · {ago(w.t, now).toUpperCase()}</span>
-            <span className="block text-lg text-marble">{crew.find((c) => c.id === b.crewId)?.name}{medical || b.crewId === account ? `: ${w.label.toLowerCase()} ${w.value}${w.unit === '%' ? '%' : ` ${w.unit}`}` : ' needs a check'}</span>
-            {(medical || b.crewId === account) && <span className="block text-sm text-marble/60">Prototype rule: {w.rule}</span>}
+            <span className="block text-lg text-marble">{crew.find((c) => c.id === b.crewId)?.name} needs a check</span>
           </span>
-          <span className="font-mono text-xs tracking-[0.2em] text-[#ff8585]">OPEN DASHBOARD</span>
+          <span className="font-mono text-xs tracking-[0.2em] text-[#ff8585]">OPEN PROFILE</span>
         </button>
       ))}
 
@@ -226,7 +222,7 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
                 {alerts > 0 && <span className="shrink-0 bg-[#e39b4b] px-2 py-0.5 font-mono text-[11px] text-void" title="Active alerts">{alerts} ALERT{alerts > 1 ? 'S' : ''}</span>}
               </div>
               <div className="mt-4 font-serif text-2xl font-bold tracking-[0.1em]" style={{ color }}>{statusLabel[h.status]}</div>
-              <div className="mt-1 flex items-center gap-1.5 text-sm tracking-[0.06em] text-marble/60">{m.id === account ? h.comment : /EMERGENCY/.test(h.comment) ? h.comment : <><Lock size={13} /> DETAILS PRIVATE</>}</div>
+              <div className="mt-1 flex items-center gap-1.5 text-sm tracking-[0.06em] text-marble/60">{/EMERGENCY/.test(h.comment) ? h.comment : <><Lock size={13} /> DETAILS PRIVATE</>}</div>
               <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 font-mono text-[11px] tracking-[0.1em]">
                 <span className={l.connected ? 'text-marble/60' : 'text-[#e39b4b]'}>
                   <Watch size={12} className="mr-1 inline" />
@@ -238,6 +234,10 @@ export function HomePage({ mission, crew, account, health, links, now, tiles, on
             </button>
           );
         })}
+        <button type="button" onClick={onAddCrew}
+          className="flex min-h-[90px] items-center justify-center gap-2 border border-dashed border-marble/25 bg-void/60 p-4 text-lg text-marble/70 hover:border-gold/60 hover:text-marble">
+          <UserPlus size={22} /> ADD A CREW MEMBER FROM A FILE
+        </button>
       </section>
 
       <button type="button" onClick={() => onPage('link')}

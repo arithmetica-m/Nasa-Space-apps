@@ -1,3 +1,4 @@
+import { loadExtraCrew } from '../access/crewFile';
 import type { MissionId } from '../types';
 import type { CrewMember, InventoryItem, Procedure } from './types';
 
@@ -16,6 +17,9 @@ export const crew: CrewMember[] = [
   { id: 'ravi', name: 'Ravi Iyer', position: 'Mission specialist', qualifications: ['life-support', 'comms', 'peer-support'], available: true,
     medical: { allergies: [], conditions: [], history: ['Motion sickness during training (simulated)'], notes: 'Baseline from pre-flight exam (simulated).' } },
 ];
+// Crew members added from a crew file on this device (see access/crewFile.ts).
+crew.push(...loadExtraCrew().filter((m) => !crew.some((c) => c.id === m.id)));
+
 
 const base: Omit<InventoryItem, 'log'>[] = [
   { id: 'o2-mask', name: 'Oxygen mask set', category: 'protective', quantity: 3, location: 'Medical bay, drawer M2', status: 'available' },

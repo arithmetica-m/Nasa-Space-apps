@@ -45,7 +45,7 @@ export function MissionPage({ mission, crew, links, now }: { mission: Mission; c
                 <div className="min-w-0 flex-1">
                   <div className="text-lg text-marble">{m.name} <span className="text-sm text-marble/50">· {roleOf(m)}</span></div>
                   <div className={`text-base ${l.connected ? 'text-marble/75' : 'text-[#f3c28d]'}`}>{l.connected ? `${l.location} · ${l.activity}` : `Last seen in ${l.location}, ${ago(l.lastSync, now)}`}</div>
-                  <div className="text-sm text-marble/50">{DUTIES[m.id]?.[0]}</div>
+                  <div className="text-sm text-marble/50">{(DUTIES[m.id] ?? m.duties)?.[0]}</div>
                 </div>
               </li>
             );

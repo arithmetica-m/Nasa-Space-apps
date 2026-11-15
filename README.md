@@ -25,20 +25,44 @@ npm run dev -- --host
 
 ## Privacy: one shared dashboard, protected profiles
 
-The crew dashboard shows only each person's general status, CHIRON LINK connection and alert count. Medical details live in each astronaut's own profile, behind a PIN.
+The crew dashboard shows only each person's general status, CHIRON LINK connection and alert count. Medical details live in each astronaut's own profile. A profile locks again every time it is closed, so it asks for that astronaut's PIN on every visit.
 
-| Role | What they can open |
-| --- | --- |
-| Astronaut | Their own medical profile |
-| Medical officer (and backup) | Any profile; every opening is written in the medical log |
-| Commander | Status, location and tasks of each person, not medical details |
-| Anyone, in an emergency | **Emergency access**: pick a reason, the profile opens for 15 minutes, and name, time and reason are logged where the owner can see them |
+| Way in | Who | Logged? |
+| --- | --- | --- |
+| The astronaut's own PIN | The astronaut | No |
+| Medical officer access | A medical officer, with their own PIN | Yes, with name and time |
+| Emergency access | Anyone, after choosing a reason | Yes, with name, time and reason, where the owner can see it |
 
 Demo PINs (prototype sign-in, checked in the browser, not real security): Ana `1111`, Lena `2222`, Kai `3333`, Ravi `4444`. They are defined in `src/access/access.ts`.
 
+## Adding a crew member from a file
+
+On the dashboard, **ADD A CREW MEMBER FROM A FILE** loads one JSON crew file. CHIRON checks every required field and lists exactly what is missing; when the file is complete it builds the person's profile, medical record, LINK band, responsibilities and training record. The dialog offers an empty template and shows the format (`src/access/crewFile.ts`):
+
+```json
+{
+  "format": "chiron-crew-file", "version": 1,
+  "id": "mei", "name": "Mei Tanaka", "position": "Payload specialist",
+  "qualifications": ["life-support", "comms"], "pin": "5555",
+  "medical": { "allergies": [], "medications": [], "history": [], "restrictions": [], "notes": "" },
+  "duties": ["Payload operations"],
+  "link": { "location": "Laboratory", "activity": "Science experiment" }
+}
+```
+
+The new member's health history is simulated like the rest of the crew's, and they are stored on the device where the file was loaded.
+
 ## Emergency mode
 
-Press **EMERGENCY MODE** on any screen, or turn on the microphone and say **"emergency"**. Two taps start it: who, then what. Each crew member's device then shows one large step at a time with big DONE / YES / NO buttons, read aloud. Voice works throughout: "done", "yes", "no", "can't", "repeat", and on the start screen a name and "breathing", "allergy", "decompression" or "panic".
+Press **EMERGENCY MODE** on any screen, or turn on the microphone and say **"emergency"**. Two taps start it: who, then what. Every crew device then switches to the live emergency screen:
+
+- **The patient, first:** name, emergency type, EMERGENCY ACTIVE, and URGENT ACTION REQUIRED (missing equipment, measurements still needed, steps waiting for confirmation).
+- **Measurements:** each with its time and source; missing ones say NOT AVAILABLE and can be entered on the spot. Simulated LINK readings are labelled.
+- **Procedure:** which step the crew is on, who is doing it, and what comes next. Your own step has big DONE / YES / NO buttons and is read aloud.
+- **Live updates:** observations, completed steps, role changes and Earth's replies, newest first, each with a time.
+- **VIEW CREW ASSIGNMENTS** (always visible): each assigned person's role, responsibility and status (NOT STARTED / IN PROGRESS / COMPLETED), plus who is AVAILABLE or UNAVAILABLE. Tapping a person opens their instructions.
+
+Everyone is notified; only the people needed get a task. The CHIRON LINK page shows what each band displays: TASK ASSIGNED with the role, NO TASK ASSIGNED, or MEDICAL EMERGENCY ACTIVE for the patient. Voice works throughout: "done", "yes", "no", "can't", "repeat".
 
 ## The main idea: the Response Planner
 

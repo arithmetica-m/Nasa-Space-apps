@@ -62,10 +62,9 @@ export function RoadmapPage({ onOpen }: { onOpen: (p: Page) => void }) {
       </Panel>
       <Panel title="WHO CAN SEE WHAT">
         <ul className="space-y-1 text-base text-marble/85">
-          <li>• The shared dashboard shows general status only. Medical details are in each person’s profile, behind their PIN.</li>
-          <li>• Astronaut: their own profile. Medical officers: any profile, and every opening is logged.</li>
-          <li>• Commander: status, location and tasks, not medical details.</li>
-          <li>• Emergency access: anyone can open a profile for 15 minutes with a reason; it is logged where the owner sees it.</li>
+          <li>• The shared dashboard shows general status only.</li>
+          <li>• A medical profile opens with that astronaut’s PIN, and locks again when it is closed.</li>
+          <li>• A medical officer can open it with their own PIN. Anyone can use emergency access with a reason. Both are logged where the owner sees them.</li>
         </ul>
         <p className="mt-2 text-sm text-marble/50">Prototype sign-in with demo PINs, not real security.</p>
       </Panel>

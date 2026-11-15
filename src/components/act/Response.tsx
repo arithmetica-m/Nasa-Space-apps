@@ -1,22 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, CircleDashed, Mic, Satellite, Siren, ShieldCheck, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Check, Mic, ShieldCheck, Users, Volume2, VolumeX } from 'lucide-react';
+import { crewLines, liveUpdates } from '../../emergency/board';
 import { missions } from '../../data/missions';
 import { buildEarthReport, categoryText, reportSignature } from '../../emergency/report';
 import { recordsFor } from '../../lib/crewHealth';
 import { linkFor, withLinkEvents } from '../../link/link';
 import { Reasoning } from '../Reasoning';
 import { medicalOf } from '../../library/advice';
-import { CrewRoles, Handover, Measurements, PlannerOverview, measureStates, planReasoning } from './ResponseExtras';
+import { CrewRoles, Handover, PlannerOverview, measureStates, planReasoning } from './ResponseExtras';
 import { phaseOf } from '../MissionTimeline';
 import type { DemoMedicalProfile, Procedure, RoleId } from '../../emergency/types';
 import { DELAY_MIN, buildPlan, casesFrom, crewNow, roleName, rolesOf } from '../../emergency/plan';
-import { publish, useLog, useSyncStatus } from '../../emergency/sync';
+import { publish, useLog } from '../../emergency/sync';
 import { newId } from '../../emergency/events';
 import { crew } from '../../emergency/data';
 import { speak } from '../VoiceControl';
 import { EMERGENCY_VOICE_EVENT, type EmergencyVoice } from '../../lib/voiceCommands';
 
-type Tab = 'measure' | 'crew' | 'record' | 'earth' | 'plan';
+type Tab = 'record' | 'earth' | 'plan';
 
 
 function isDemoMedicalProfile(value: unknown): value is DemoMedicalProfile {
@@ -59,7 +60,6 @@ interface Props {
 
 export function Response({ eid, kb, account, onLeave, listening, voiceSupported, onVoice }: Props) {
   const log = useLog();
-  const sync = useSyncStatus();
   const cases = useMemo(() => casesFrom(log), [log]);
   const c = cases.find((item) => item.eid === eid);
   const plan = useMemo(() => c ? buildPlan(c, kb, log, cases) : undefined, [c, kb, log, cases]);
@@ -69,6 +69,11 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const [tab, setTab] = useState<Tab>();
   const [readAloud, setReadAloud] = useState(true);
   const [ending, setEnding] = useState(false);
+  const [view, setView] = useState<'main' | 'crew'>('main');
+  const [person, setPerson] = useState<string>();   // whose instructions are open on the crew screen
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [note, setNote] = useState('');
+  const [showAll, setShowAll] = useState(false);
   // Voice commands reach the newest version of the handler through this ref.
   const voiceRef = useRef<(action: NonNullable<EmergencyVoice['action']>) => void>(() => undefined);
   useEffect(() => {
@@ -80,7 +85,6 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   // ---- Automatic reports to Earth ----
   // The device that reported the emergency sends them. If it goes quiet for 6 minutes, any open device takes over.
   const [now, setNow] = useState(Date.now());
-  const [reportOpen, setReportOpen] = useState(false);
   const sentRef = useRef(new Set<number>()); // never send the same update number twice
   const [handoverSeen, setHandoverSeen] = useState(false);
   const [showHandover, setShowHandover] = useState(false);
@@ -144,6 +148,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const isLead = myRoles.includes('lead');
   const isMedicalAccessAuthorized = isLead || !!me?.qualifications.some((qualification) => qualification === 'cmo' || qualification === 'cmo-backup');
   const mine = plan.tasks.filter((task) => myRoles.includes(task.step.role));
+  void me;
   const activeTask = mine.find((task) => task.status === 'ready')
     ?? mine.find((task) => task.status === 'blocked')
     ?? mine.find((task) => task.status === 'waiting');
@@ -168,211 +173,283 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   };
   const medicalAccessEvents = log.filter((event) => event.type === 'medical-access' && event.eid === eid && event.patientId === c.patientId);
 
-  // ---- What this person should see right now ----
-  const stepText = !activeTask ? '' : activeTask.status === 'waiting' ? 'Wait for your crew.' : activeTask.status === 'blocked' ? 'Get the medical lead.' : activeTask.step.ask?.question ?? activeTask.step.text;
-  const needsConfirm = !!activeTask && activeTask.status === 'ready' && activeTask.step.verify === 'clinical' && !c.verified.has(activeTask.step.id);
-  const doneCount = mine.filter((task) => task.status === 'done' || task.status === 'cannot').length;
+  // ---- The live emergency screen ----
+  const lines = crewLines(c, plan, log, links);
+  const updates = liveUpdates(c, plan, log, now);
   const minutes = Math.max(0, Math.round((now - c.startedAt) / 60_000));
-  const missingCount = states.filter((s) => s.value === undefined).length;
-  const earthLine = lastReport
-    ? `${lastReport.report!.n === 1 ? 'First report' : `Update ${lastReport.report!.n}`} ${lastReport.arrivesAt <= now ? 'reached Earth' : lastReport.arrivesAt - now < 60_000 ? 'reaches Earth in seconds' : `reaches Earth in ${Math.round((lastReport.arrivesAt - now) / 60_000)} min`}`
-    : 'Writing the first report…';
-  const reply = [...c.messages].reverse().find((m) => m.direction === 'in' && m.arrivesAt <= now);
+  const doneSteps = plan.tasks.filter((t) => t.status === 'done' || t.status === 'cannot').length;
+  const currentTask = plan.tasks.find((t) => t.status === 'ready') ?? plan.tasks.find((t) => t.status === 'blocked');
+  const nextTask = plan.tasks.find((t) => t !== currentTask && (t.status === 'waiting' || t.status === 'ready' || t.status === 'blocked'));
+  const who = (t?: { step: { role: RoleId } }) => (t ? plan.roles[t.step.role]?.person?.name.split(' ')[0] ?? roleName[t.step.role] : '');
+  const textOf = (t: { step: { text: string; ask?: { question: string } } }) => t.step.ask?.question ?? t.step.text;
 
-  // Voice: done / yes / no / can't / repeat / confirm, and for the patient: worse / better.
+  // What needs attention now, most serious first.
+  const urgent: { text: string; tone: 'red' | 'amber' }[] = [
+    ...plan.alerts.map((a) => ({ text: a, tone: 'red' as const })),
+    ...(plan.missing ? [{ text: 'No approved procedure in CHIRON for this. Use the paper emergency card.', tone: 'red' as const }] : []),
+    ...plan.tasks.filter((t) => t.status === 'blocked').map((t) => ({ text: `Missing equipment for “${textOf(t)}”: ${t.blockedBy ?? 'ask the medical lead'}`, tone: 'red' as const })),
+    ...plan.tasks.filter((t) => t.status === 'ready' && t.step.verify === 'clinical' && !c.verified.has(t.step.id)).map((t) => ({ text: `${who(t)} must confirm: ${textOf(t)}`, tone: 'amber' as const })),
+    ...states.filter((s) => s.value === undefined).map((s) => ({ text: `${s.m.unit ? 'Measure' : 'Find out'} now: ${s.m.label}`, tone: 'amber' as const })),
+    ...lines.filter((l) => l.state === 'ASSIGNED' && links[l.member.id] && !links[l.member.id].connected).map((l) => ({ text: `${l.member.name.split(' ')[0]}’s band is offline: tell them their task in person`, tone: 'amber' as const })),
+  ];
+
+  // One person's current instruction, with the buttons to act on it.
+  const stepCard = (actorId: string) => {
+    const line = lines.find((l) => l.member.id === actorId)!;
+    const roles = line.roles;
+    const theirs = plan.tasks.filter((t) => roles.includes(t.step.role));
+    const task = line.current;
+    const lead = roles.includes('lead');
+    const text = !task ? '' : task.status === 'waiting' ? 'Wait for your crew.' : task.status === 'blocked' ? 'Get the medical lead.' : textOf(task);
+    const confirm = !!task && task.status === 'ready' && task.step.verify === 'clinical' && !c.verified.has(task.step.id);
+    const act = (outcome: 'done' | 'cannot' | 'yes' | 'no') => { publish({ type: 'step', eid, by: actorId, stepId: task!.step.id, outcome }); setCannot(undefined); };
+    const first = line.member.name.split(' ')[0];
+    if (line.state === 'PATIENT') return <p className="border-2 border-[#e45b5b]/50 bg-[#e45b5b]/[0.06] p-5 text-2xl text-marble">{first} is the patient. Stay still: the crew is helping.</p>;
+    if (!theirs.length) return <p className="border-2 border-marble/20 p-5 text-2xl text-marble">NO TASK ASSIGNED. Remain available. Follow updates from CHIRON.</p>;
+    if (!task) return <p className="border-2 border-[#5cc8a8]/50 bg-[#5cc8a8]/[0.06] p-5 text-2xl text-marble">All of {first}’s steps are done.</p>;
+    return (
+      <section aria-live="polite" className={`border-2 p-5 md:p-7 ${task.status === 'ready' ? 'border-[#e45b5b]/70 bg-[#101721]' : 'border-[#e39b4b]/60 bg-[#e39b4b]/[0.06]'}`}>
+        {readAloud && actorId === account && <SpeakStep key={`${task.step.id}-${task.status}`} text={text} />}
+        <div className="flex flex-wrap items-center justify-between gap-2 text-lg text-[#ff9c9c]">
+          <span className="font-semibold">{actorId === account ? 'YOUR STEP' : `${first.toUpperCase()}’S STEP`} {Math.min(line.done + 1, line.total)} OF {line.total}</span>
+          <span className="text-marble/60">{line.roleText}</span>
+        </div>
+        <div className="mt-2 flex gap-1" aria-hidden="true">{theirs.map((t) => <span key={t.step.id} className={`h-2 flex-1 ${t.status === 'done' || t.status === 'cannot' ? 'bg-[#5cc8a8]' : t === task ? 'bg-[#e45b5b]' : 'bg-marble/15'}`} />)}</div>
+        <h2 className="mt-4 text-3xl font-semibold leading-tight text-marble md:text-5xl">{text}</h2>
+        {task.status !== 'ready' && <p className="mt-3 text-xl text-[#f3c28d]">{task.status === 'waiting' ? 'Another step must finish first.' : `Missing equipment: ${task.blockedBy ?? 'ask the medical lead'}.`}</p>}
+        {task.status === 'ready' && task.step.ask && (
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button onClick={() => act('yes')} className="min-h-24 border-2 border-marble/50 bg-marble/[0.06] text-3xl font-semibold text-marble hover:bg-marble/15">YES</button>
+            <button onClick={() => act('no')} className="min-h-24 border-2 border-marble/50 bg-marble/[0.06] text-3xl font-semibold text-marble hover:bg-marble/15">NO</button>
+          </div>
+        )}
+        {confirm && (lead
+          ? <button type="button" onClick={() => publish({ type: 'verify', eid, by: actorId, stepId: task.step.id })} className="mt-5 flex min-h-20 w-full items-center justify-center gap-3 border-2 border-[#5cc8a8] bg-[#5cc8a8]/10 px-4 text-xl font-semibold text-[#9be3cc]"><ShieldCheck size={26} /> CONFIRM: THE CHECKLIST WAS FOLLOWED</button>
+          : <p className="mt-5 border-l-4 border-[#e39b4b] bg-[#e39b4b]/10 px-4 py-3 text-xl text-[#f3c28d]">Waiting for {plan.roles.lead.person?.name.split(' ')[0] ?? 'the medical lead'} to confirm.</p>)}
+        {task.status === 'ready' && !task.step.ask && !confirm && (
+          <button onClick={() => act('done')} className="mt-5 flex min-h-24 w-full items-center justify-center gap-3 bg-[#e45b5b] px-5 text-3xl font-bold text-[#16090a] hover:bg-[#ff8585]"><Check size={34} strokeWidth={3} /> DONE</button>
+        )}
+        {cannot === task.step.id ? (
+          <div className="mt-4 border-2 border-[#e39b4b]/70 bg-[#e39b4b]/10 p-4">
+            <p className="text-2xl text-marble">{task.step.ifCannot ?? 'Tell the medical lead.'}</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <button onClick={() => act('cannot')} className="min-h-16 bg-[#e39b4b] px-5 text-xl font-semibold text-[#17100a]">RECORD AND GO ON</button>
+              <button onClick={() => setCannot(undefined)} className="min-h-16 border-2 border-marble/30 px-5 text-xl text-marble/80">BACK TO THE STEP</button>
+            </div>
+          </div>
+        ) : task.status === 'ready' && (
+          <button onClick={() => setCannot(task.step.id)} className="mt-3 min-h-16 w-full border-2 border-marble/25 px-5 text-xl text-marble/75 hover:border-marble/50">I CAN’T DO THIS</button>
+        )}
+      </section>
+    );
+  };
+
+  // Voice: done / yes / no / can't / repeat / confirm act on this device's own step.
   voiceRef.current = (action) => {
-    if (isPatient) {
-      if (action === 'worse' || action === 'better') { publish({ type: 'vitals', eid, by: account, note: `Patient reports feeling ${action}` }); speak(`Your crew knows you feel ${action}.`); }
-      else speak('Say worse or better.');
-      return;
-    }
+    if (isPatient) { speak('Your crew is helping you.'); return; }
     if (!activeTask) { speak('You have no step right now.'); return; }
-    if (action === 'repeat') { speak(stepText); return; }
-    if (activeTask.status !== 'ready') { speak(stepText); return; }
+    const text = activeTask.status === 'ready' ? textOf(activeTask) : 'Wait for your crew.';
+    const confirm = activeTask.status === 'ready' && activeTask.step.verify === 'clinical' && !c.verified.has(activeTask.step.id);
+    if (action === 'repeat' || activeTask.status !== 'ready') { speak(text); return; }
     if (action === 'yes' || action === 'no') {
       if (activeTask.step.ask) { complete(activeTask.step.id, action); speak(`Recorded: ${action}.`); } else speak('This step is not a question. Say done when it is finished.');
     } else if (action === 'cannot') { setCannot(activeTask.step.id); speak(activeTask.step.ifCannot ?? 'Tell the medical lead.'); }
     else if (action === 'confirm') {
-      if (needsConfirm && isLead) { publish({ type: 'verify', eid, by: account, stepId: activeTask.step.id }); speak('Confirmed.'); } else speak('Nothing to confirm.');
+      if (confirm && isLead) { publish({ type: 'verify', eid, by: account, stepId: activeTask.step.id }); speak('Confirmed.'); } else speak('Nothing to confirm.');
     } else if (action === 'next') {
       const r = advanceStep();
-      speak(r === 'advanced' ? 'Done.' : r === 'answer' ? 'Answer yes or no.' : needsConfirm ? (isLead ? 'Say confirm first.' : 'The medical lead must confirm this step.') : 'Waiting for your crew.');
+      speak(r === 'advanced' ? 'Done.' : r === 'answer' ? 'Answer yes or no.' : confirm ? (isLead ? 'Say confirm first.' : 'The medical lead must confirm this step.') : 'Waiting for your crew.');
     }
   };
 
-  const TABS: { id: Tab; label: string; badge?: string; show: boolean }[] = [
-    { id: 'measure', label: 'MEASURE', badge: missingCount ? `${missingCount} needed` : 'all in', show: !isPatient && states.length > 0 },
-    { id: 'crew', label: 'CREW', show: true },
-    { id: 'record', label: 'MEDICAL RECORD', show: !isPatient && isMedicalAccessAuthorized },
-    { id: 'earth', label: 'EARTH', badge: reply ? 'reply' : undefined, show: true },
-    { id: 'plan', label: 'PLAN', show: !isPatient },
-  ];
-
-  return (
-    <div className="absolute inset-0 z-30 flex flex-col overflow-y-auto bg-[#080b11]" style={{ animation: 'fade-in 0.3s ease-out' }}>
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b-2 border-[#e45b5b] bg-[#1a0c0e]/95 px-4 py-3 backdrop-blur md:px-8">
-        <Siren className="shrink-0 animate-pulse text-[#ff8585]" size={28} />
+  const header = (
+    <header className="sticky top-0 z-10 border-b-4 border-[#e45b5b] bg-[#1a0c0e] px-4 py-3 md:px-8">
+      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3">
         <div className="mr-auto min-w-0">
-          <h1 className="truncate text-xl font-semibold text-marble md:text-2xl">{plan.patient.name} · {categoryText[c.category]}</h1>
-          <div className="text-sm text-[#ff9c9c]">{minutes} min · {sync === 'relay' ? 'all crew devices connected' : 'this device only'} · {earthLine}</div>
+          <div className="text-base font-semibold tracking-wide text-[#ff8585]">EMERGENCY ACTIVE · {minutes} MIN</div>
+          <h1 className="text-3xl font-bold leading-tight text-marble md:text-5xl">{plan.patient.name}</h1>
+          <div className="text-xl text-marble/90 md:text-2xl">{categoryText[c.category]}</div>
         </div>
+        <button type="button" onClick={() => { setView(view === 'crew' ? 'main' : 'crew'); setPerson(undefined); }}
+          className="flex min-h-16 items-center gap-2 bg-marble px-5 text-lg font-bold text-void hover:bg-white">
+          <Users size={22} /> {view === 'crew' ? 'BACK TO THE PATIENT' : 'VIEW CREW ASSIGNMENTS'}
+        </button>
         {voiceSupported && (
-          <button type="button" onClick={onVoice} aria-pressed={listening}
-            className={`flex min-h-14 items-center gap-2 border-2 px-4 text-base ${listening ? 'border-[#5cc8a8] bg-[#5cc8a8]/15 text-[#7bd5b8]' : 'border-marble/30 text-marble/80'}`}>
-            <Mic size={20} /> {listening ? 'LISTENING' : 'VOICE'}
-          </button>
+          <button type="button" onClick={onVoice} aria-pressed={listening} aria-label="Voice commands"
+            className={`flex min-h-16 min-w-16 items-center justify-center border-2 ${listening ? 'border-[#5cc8a8] bg-[#5cc8a8]/15 text-[#7bd5b8]' : 'border-marble/30 text-marble/80'}`}><Mic size={22} /></button>
         )}
         <button type="button" onClick={() => setReadAloud(!readAloud)} aria-pressed={readAloud} aria-label="Read steps aloud"
-          className={`flex min-h-14 items-center gap-2 border-2 px-4 text-base ${readAloud ? 'border-gold/70 text-gold' : 'border-marble/30 text-marble/60'}`}>
-          {readAloud ? <Volume2 size={20} /> : <VolumeX size={20} />}
-        </button>
-        <button onClick={onLeave} className="flex min-h-14 items-center gap-2 border-2 border-marble/30 px-4 text-base text-marble/80 hover:border-marble/60"><ArrowLeft size={18} /> HOME</button>
-      </header>
+          className={`flex min-h-16 min-w-16 items-center justify-center border-2 ${readAloud ? 'border-gold/70 text-gold' : 'border-marble/30 text-marble/60'}`}>{readAloud ? <Volume2 size={22} /> : <VolumeX size={22} />}</button>
+        <button onClick={onLeave} aria-label="Back to the dashboard" className="flex min-h-16 items-center gap-2 border-2 border-marble/30 px-4 text-lg text-marble/80 hover:border-marble/60"><ArrowLeft size={20} /> EXIT</button>
+      </div>
+    </header>
+  );
 
-      <main className="mx-auto w-full max-w-4xl flex-1 space-y-4 p-4 pb-28 md:p-6">
-        {plan.alerts[0] && <p role="alert" className="border-l-4 border-[#e45b5b] bg-[#e45b5b]/10 px-4 py-3 text-xl font-medium text-marble">{plan.alerts[0]}</p>}
+  // ---- CREW ASSIGNMENTS: who is responsible for what ----
+  if (view === 'crew') {
+    const stateColor: Record<string, string> = { 'NOT STARTED': 'text-marble/60 border-marble/30', 'IN PROGRESS': 'text-[#f3c28d] border-[#e39b4b]/70', COMPLETED: 'text-[#7bd5b8] border-[#5cc8a8]/70' };
+    const assigned = lines.filter((l) => l.state === 'ASSIGNED');
+    const others = lines.filter((l) => l.state === 'AVAILABLE' || l.state === 'UNAVAILABLE');
+    return (
+      <div className="absolute inset-0 z-30 flex flex-col overflow-y-auto bg-[#080b11]">
+        {header}
+        <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 p-4 pb-16 md:p-6">
+          <h2 className="text-2xl font-semibold text-marble">ASSIGNED</h2>
+          <ul className="grid gap-3 md:grid-cols-2">
+            {assigned.map((l) => (
+              <li key={l.member.id}>
+                <button type="button" onClick={() => setPerson(person === l.member.id ? undefined : l.member.id)} aria-pressed={person === l.member.id}
+                  className={`w-full border-2 p-4 text-left ${person === l.member.id ? 'border-gold bg-gold/10' : 'border-marble/20 hover:border-marble/50'}`}>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-3xl font-semibold text-marble">{l.member.name}{l.member.id === account ? ' (you)' : ''}</span>
+                    <span className={`border-2 px-3 py-1 text-lg font-semibold ${stateColor[l.taskState!]}`}>{l.taskState}</span>
+                  </div>
+                  <div className="mt-1 text-2xl text-gold">{l.roleText}</div>
+                  <div className="mt-2 text-xl text-marble/85">{l.responsibility}</div>
+                  <div className="mt-2 text-base text-marble/55">Step {Math.min(l.done + 1, l.total)} of {l.total} · tap to open {l.member.name.split(' ')[0]}’s instructions</div>
+                </button>
+              </li>
+            ))}
+            {assigned.length === 0 && <li className="text-xl text-marble/70">Nobody has a task: no approved procedure is loaded.</li>}
+          </ul>
+          {person && <div>{stepCard(person)}</div>}
+
+          <h2 className="pt-2 text-2xl font-semibold text-marble">NOT ASSIGNED</h2>
+          <ul className="grid gap-3 md:grid-cols-2">
+            {others.map((l) => (
+              <li key={l.member.id} className="flex flex-wrap items-baseline justify-between gap-2 border-2 border-marble/15 p-4">
+                <span className="text-2xl text-marble">{l.member.name}{l.member.id === account ? ' (you)' : ''}</span>
+                <span className={`text-xl font-semibold ${l.state === 'AVAILABLE' ? 'text-[#7bd5b8]' : 'text-[#f3c28d]'}`}>{l.state}</span>
+                {l.why && <span className="w-full text-lg text-marble/60">{l.why}</span>}
+              </li>
+            ))}
+            {others.length === 0 && <li className="text-xl text-marble/60">Everyone has a task.</li>}
+          </ul>
+
+          <details className="border border-marble/15">
+            <summary className="min-h-14 cursor-pointer px-4 py-3 text-xl text-marble/85">Change who does what</summary>
+            <div className="border-t border-marble/10 p-4"><CrewRoles eid={eid} account={account} plan={plan} c={c} links={links} log={log} /></div>
+          </details>
+        </main>
+      </div>
+    );
+  }
+
+  // ---- MAIN: what is happening to the patient right now ----
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col overflow-y-auto bg-[#080b11]">
+      {header}
+      <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 p-4 pb-16 md:p-6">
         {c.assignments.lead?.crewId === account && !handoverSeen && <Handover c={c} plan={plan} states={states} onClose={() => setHandoverSeen(true)} />}
 
-        {/* THE ONE THING TO DO NOW */}
-        {isPatient ? (
-          <section className="border-2 border-[#e45b5b]/50 bg-[#e45b5b]/[0.06] p-6 text-center md:p-10">
-            <h2 className="text-3xl font-semibold text-marble md:text-4xl">Your crew is helping you.</h2>
-            <p className="mt-2 text-xl text-marble/75">{plan.roles.lead.person ? `${plan.roles.lead.person.name.split(' ')[0]} is leading.` : ''} Stay still and tell them how you feel.</p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <button onClick={() => publish({ type: 'vitals', eid, by: account, note: 'Patient reports feeling worse' })} className="min-h-24 border-2 border-[#e45b5b] bg-[#e45b5b]/15 text-2xl font-semibold text-[#ffb3b3]">I FEEL WORSE</button>
-              <button onClick={() => publish({ type: 'vitals', eid, by: account, note: 'Patient reports feeling better' })} className="min-h-24 border-2 border-[#5cc8a8]/70 text-2xl font-semibold text-[#9be3cc]">I FEEL BETTER</button>
-            </div>
-          </section>
-        ) : plan.missing ? (
-          <section role="alert" className="border-2 border-[#e39b4b]/70 bg-[#e39b4b]/[0.08] p-6 md:p-8">
-            <h2 className="text-3xl font-semibold leading-tight text-marble md:text-4xl">CHIRON has no approved procedure for this on this mission.</h2>
-            <ol className="mt-4 list-decimal space-y-2 pl-7 text-2xl text-marble/90">
-              <li>Use the paper emergency card.</li>
-              <li>Stay with {plan.patient.name.split(' ')[0]}.</li>
-              <li>Record measurements here: Earth gets them automatically.</li>
-            </ol>
-          </section>
-        ) : activeTask ? (
-          <section aria-labelledby="step-heading" aria-live="polite"
-            className={`border-2 p-5 md:p-8 ${activeTask.status === 'ready' ? 'border-[#e45b5b]/70 bg-[#101721]' : 'border-[#e39b4b]/60 bg-[#e39b4b]/[0.06]'}`}>
-            {readAloud && <SpeakStep key={`${activeTask.step.id}-${activeTask.status}`} text={stepText} />}
-            <div className="flex flex-wrap items-center justify-between gap-2 text-base text-[#ff9c9c]">
-              <span className="font-semibold tracking-wide">YOUR STEP {Math.min(doneCount + 1, mine.length)} OF {mine.length}</span>
-              <span className="text-marble/60">{myRoles.map((r) => roleName[r]).join(' · ')}</span>
-            </div>
-            <div className="mt-2 flex gap-1" aria-hidden="true">{mine.map((t) => <span key={t.step.id} className={`h-2 flex-1 ${t.status === 'done' || t.status === 'cannot' ? 'bg-[#5cc8a8]' : t === activeTask ? 'bg-[#e45b5b]' : 'bg-marble/15'}`} />)}</div>
-
-            <h2 id="step-heading" className="mt-5 text-3xl font-semibold leading-tight text-marble md:text-5xl">{stepText}</h2>
-            {activeTask.status === 'ready' && activeTask.step.why && <p className="mt-3 text-lg text-marble/60">Why: {activeTask.step.why}</p>}
-            {activeTask.status !== 'ready' && <p className="mt-4 text-xl text-[#f3c28d]">{activeTask.status === 'waiting' ? 'Another crew step must finish first. CHIRON will show your step as soon as it does.' : `Missing equipment: ${activeTask.blockedBy ?? 'ask the medical lead'}.`}</p>}
-
-            {activeTask.status === 'ready' && activeTask.step.ask && (
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                <button onClick={() => complete(activeTask.step.id, 'yes')} className="min-h-24 border-2 border-marble/50 bg-marble/[0.06] text-3xl font-semibold text-marble hover:bg-marble/15">YES</button>
-                <button onClick={() => complete(activeTask.step.id, 'no')} className="min-h-24 border-2 border-marble/50 bg-marble/[0.06] text-3xl font-semibold text-marble hover:bg-marble/15">NO</button>
-              </div>
-            )}
-
-            {needsConfirm && (isLead
-              ? <button type="button" onClick={() => publish({ type: 'verify', eid, by: account, stepId: activeTask.step.id })}
-                  className="mt-6 flex min-h-20 w-full items-center justify-center gap-3 border-2 border-[#5cc8a8] bg-[#5cc8a8]/10 px-4 text-xl font-semibold text-[#9be3cc]"><ShieldCheck size={26} /> CONFIRM: THE CHECKLIST WAS FOLLOWED</button>
-              : <p className="mt-6 border-l-4 border-[#e39b4b] bg-[#e39b4b]/10 px-4 py-3 text-xl text-[#f3c28d]">Waiting for {plan.roles.lead.person?.name.split(' ')[0] ?? 'the medical lead'} to confirm this step.</p>)}
-
-            {activeTask.status === 'ready' && !activeTask.step.ask && !needsConfirm && (
-              <button onClick={() => { advanceStep(); }} className="mt-6 flex min-h-24 w-full items-center justify-center gap-3 bg-[#e45b5b] px-5 text-3xl font-bold text-[#16090a] hover:bg-[#ff8585]"><Check size={34} strokeWidth={3} /> DONE</button>
-            )}
-
-            {cannot === activeTask.step.id ? (
-              <div className="mt-4 border-2 border-[#e39b4b]/70 bg-[#e39b4b]/10 p-4">
-                <p className="text-2xl text-marble">{activeTask.step.ifCannot ?? 'Tell the medical lead.'}</p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <button onClick={() => complete(activeTask.step.id, 'cannot')} className="min-h-16 bg-[#e39b4b] px-5 text-xl font-semibold text-[#17100a]">RECORD AND GO ON</button>
-                  <button onClick={() => setCannot(undefined)} className="min-h-16 border-2 border-marble/30 px-5 text-xl text-marble/80">BACK TO THE STEP</button>
-                </div>
-              </div>
-            ) : activeTask.status === 'ready' && (
-              <button onClick={() => setCannot(activeTask.step.id)} className="mt-3 min-h-16 w-full border-2 border-marble/25 px-5 text-xl text-marble/75 hover:border-marble/50">I CAN’T DO THIS</button>
-            )}
-            <p className="mt-3 text-center text-base text-marble/45">Voice: “done” · “yes” · “no” · “can’t” · “repeat”</p>
-          </section>
-        ) : (
-          <section className="border-2 border-[#63c9a8]/40 bg-[#63c9a8]/[0.05] p-8 text-center">
-            <CircleDashed className="mx-auto text-marble/40" size={36} />
-            <h2 className="mt-3 text-3xl font-semibold text-marble">{mine.length ? 'Your steps are done.' : 'No task for you yet. Stay close.'}</h2>
-            <p className="mt-2 text-xl text-marble/65">Watch the crew list below. CHIRON will show your step if you are needed.</p>
+        {urgent.length > 0 && (
+          <section role="alert" aria-label="Urgent action required" className="border-4 border-[#e45b5b] bg-[#e45b5b]/10 p-4">
+            <h2 className="text-xl font-bold tracking-wide text-[#ff8585]">URGENT ACTION REQUIRED</h2>
+            <ul className="mt-2 space-y-2">
+              {urgent.map((u) => <li key={u.text} className={`border-l-8 pl-3 text-2xl font-semibold ${u.tone === 'red' ? 'border-[#e45b5b] text-marble' : 'border-[#e39b4b] text-[#ffd9a8]'}`}>{u.text}</li>)}
+            </ul>
           </section>
         )}
 
-        {/* WHO IS DOING WHAT: always in view */}
-        <ul aria-label="Crew" className="grid gap-2 sm:grid-cols-2">
-          {crewNow(log).map((member) => {
-            const roles = rolesOf(plan.roles, member.id);
-            const theirs = plan.tasks.filter((task) => roles.includes(task.step.role));
-            const current = theirs.find((t) => t.status === 'ready') ?? theirs.find((t) => t.status === 'blocked') ?? theirs.find((t) => t.status === 'waiting');
-            const finished = theirs.filter((t) => t.status === 'done' || t.status === 'cannot').length;
-            const patient = member.id === c.patientId;
-            const offline = links[member.id] && !links[member.id].connected;
-            return (
-              <li key={member.id} className={`border px-4 py-3 ${patient ? 'border-[#e45b5b]/50 bg-[#e45b5b]/[0.06]' : member.id === account ? 'border-gold/50' : 'border-marble/10'}`}>
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-lg text-marble">{member.name}{member.id === account ? ' (you)' : ''}</span>
-                  <span className="text-sm text-marble/55">{patient ? 'PATIENT' : roles.length ? `${roles.map((r: RoleId) => roleName[r]).join(' · ')} · ${finished}/${theirs.length}` : 'standing by'}</span>
-                </div>
-                {!patient && <p className={`text-base ${current?.status === 'ready' ? 'text-marble/80' : 'text-marble/50'}`}>{current ? (current.status === 'ready' ? `Now: ${current.step.ask?.question ?? current.step.text}` : current.status === 'waiting' ? 'Waiting for another step' : 'Blocked: missing equipment') : theirs.length ? 'All steps done' : 'No task'}</p>}
-                {offline && !patient && <p className="text-sm text-[#f3c28d]">Band offline: tell them in person.</p>}
+        <section aria-label="Live health measurements">
+          <h2 className="text-xl font-bold tracking-wide text-marble/70">MEASUREMENTS</h2>
+          <ul className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {states.map((s) => (
+              <li key={s.m.key} className={`border-2 p-3 ${s.value === undefined ? 'border-[#e39b4b]/70 bg-[#e39b4b]/[0.06]' : 'border-marble/20'}`}>
+                <div className="text-lg text-marble/70">{s.m.label}</div>
+                {s.value !== undefined ? (
+                  <>
+                    <div className="text-4xl font-bold text-marble">{s.value}</div>
+                    <div className="text-base text-marble/60">{s.t ? hm(s.t) : ''} · {s.live ? 'LINK band, live (simulated)' : s.source}</div>
+                    {s.live && <button type="button" onClick={() => publish({ type: 'measure', eid, by: account, key: s.m.key, value: s.value!, source: 'link' })} className="mt-1 min-h-11 border border-gold/60 px-3 text-base text-gold">Save to the record</button>}
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold text-[#f3c28d]">NOT AVAILABLE</div>
+                    <div className="mt-1 flex gap-1">
+                      <input value={draft[s.m.key] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, [s.m.key]: e.target.value }))} aria-label={s.m.label} placeholder={s.m.unit ?? 'value'}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && (draft[s.m.key] ?? '').trim()) { publish({ type: 'measure', eid, by: account, key: s.m.key, value: draft[s.m.key].trim(), source: 'manual' }); setDraft((d) => ({ ...d, [s.m.key]: '' })); } }}
+                        className="min-h-12 w-full min-w-0 border-2 border-marble/30 bg-transparent px-2 text-xl text-marble" />
+                      <button type="button" disabled={!(draft[s.m.key] ?? '').trim()} onClick={() => { publish({ type: 'measure', eid, by: account, key: s.m.key, value: draft[s.m.key].trim(), source: 'manual' }); setDraft((d) => ({ ...d, [s.m.key]: '' })); }}
+                        className="min-h-12 shrink-0 bg-gold px-3 text-lg font-semibold text-void disabled:opacity-40">SAVE</button>
+                    </div>
+                  </>
+                )}
               </li>
-            );
-          })}
-        </ul>
+            ))}
+            {states.length === 0 && <li className="text-xl text-marble/60">No measurements listed for this emergency.</li>}
+          </ul>
+          {links[c.patientId] && !links[c.patientId].connected && <p className="mt-2 text-xl text-[#f3c28d]">{plan.patient.name.split(' ')[0]}’s LINK band is offline: no live readings. Measure by hand.</p>}
+        </section>
 
-        {!isPatient && <PlannerOverview c={c} plan={plan} states={states} links={links} phase={phaseOf(missions[c.mission])} />}
+        <section aria-label="Current procedure step" className="border-2 border-marble/20 p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-xl font-bold tracking-wide text-marble/70">PROCEDURE · STEP {Math.min(doneSteps + 1, plan.tasks.length)} OF {plan.tasks.length}</h2>
+            <span className="text-lg text-marble/60">{plan.procedure?.title}</span>
+          </div>
+          <div className="mt-2 flex gap-1" aria-hidden="true">{plan.tasks.map((t) => <span key={t.step.id} className={`h-3 flex-1 ${t.status === 'done' || t.status === 'cannot' ? 'bg-[#5cc8a8]' : t === currentTask ? 'bg-[#e45b5b]' : 'bg-marble/15'}`} />)}</div>
+          {currentTask ? <p className="mt-3 text-3xl font-semibold leading-tight text-marble">NOW: {textOf(currentTask)} <span className="text-2xl font-normal text-gold">· {who(currentTask)}</span></p>
+            : <p className="mt-3 text-3xl font-semibold text-[#7bd5b8]">{plan.tasks.length ? 'All steps are done.' : 'No steps: use the paper emergency card.'}</p>}
+          {nextTask && <p className="mt-1 text-xl text-marble/65">NEXT: {textOf(nextTask)} · {who(nextTask)}</p>}
+        </section>
 
-        {/* MORE: one panel open at a time */}
-        <div role="tablist" aria-label="More" className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {TABS.filter((t) => t.show).map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id} type="button" onClick={() => setTab(tab === t.id ? undefined : t.id)}
-              className={`min-h-16 border-2 px-2 text-base font-semibold tracking-wide ${tab === t.id ? 'border-gold bg-gold/15 text-gold' : 'border-marble/20 text-marble/85 hover:border-marble/50'}`}>
-              {t.label}{t.badge && <span className={`block text-sm font-normal ${t.badge.includes('needed') || t.badge === 'reply' ? 'text-[#f3c28d]' : 'text-marble/50'}`}>{t.badge}</span>}
-            </button>
-          ))}
+        {!isPatient && activeTask && stepCard(account)}
+        {isPatient && <p className="border-2 border-[#e45b5b]/50 bg-[#e45b5b]/[0.06] p-5 text-2xl text-marble">You are the patient. Stay still: your crew is helping you.</p>}
+
+        <section aria-label="Live updates" className="border-2 border-marble/20 p-4">
+          <h2 className="text-xl font-bold tracking-wide text-marble/70">LIVE UPDATES</h2>
+          {!isPatient && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {['Awake and talking', 'Breathing easier', 'Breathing harder', 'Not responding'].map((o) => (
+                <button key={o} type="button" onClick={() => publish({ type: 'vitals', eid, by: account, note: o })} className="min-h-12 border-2 border-marble/25 px-3 text-lg text-marble hover:border-gold">{o}</button>
+              ))}
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Other observation…" aria-label="Other observation"
+                onKeyDown={(e) => { if (e.key === 'Enter' && note.trim()) { publish({ type: 'vitals', eid, by: account, note: note.trim() }); setNote(''); } }}
+                className="min-h-12 min-w-[180px] flex-1 border-2 border-marble/25 bg-transparent px-3 text-lg text-marble" />
+            </div>
+          )}
+          <ol className="mt-3 space-y-1.5">
+            {updates.slice(0, showAll ? 100 : 6).map((u, i) => (
+              <li key={i} className={`flex gap-3 border-l-4 pl-3 text-xl ${u.tone === 'red' ? 'border-[#e45b5b] text-marble' : u.tone === 'amber' ? 'border-[#e39b4b] text-[#ffd9a8]' : 'border-marble/20 text-marble/85'}`}>
+                <span className="w-20 shrink-0 font-mono text-base text-marble/55">{hm(u.t).slice(0, 5)}</span><span>{u.text}</span>
+              </li>
+            ))}
+          </ol>
+          {updates.length > 6 && <button type="button" onClick={() => setShowAll(!showAll)} className="mt-2 min-h-11 text-lg text-gold">{showAll ? 'Show fewer' : `Show all ${updates.length}`}</button>}
+        </section>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          {isMedicalAccessAuthorized && !isPatient && <button type="button" onClick={() => setTab(tab === 'record' ? undefined : 'record')} className="min-h-14 border-2 border-marble/25 text-lg text-marble/85">MEDICAL RECORD</button>}
+          <button type="button" onClick={() => setTab(tab === 'earth' ? undefined : 'earth')} className="min-h-14 border-2 border-marble/25 text-lg text-marble/85">REPORT TO EARTH</button>
+          {!isPatient && <button type="button" onClick={() => setTab(tab === 'plan' ? undefined : 'plan')} className="min-h-14 border-2 border-marble/25 text-lg text-marble/85">HOW CHIRON PLANNED THIS</button>}
         </div>
-
-        {tab === 'measure' && <Measurements eid={eid} account={account} states={states} patientLink={links[c.patientId]} now={now} />}
-
-        {tab === 'crew' && (
-          <section className="border border-marble/15 bg-[#101721] p-4">
-            <h2 className="text-lg font-semibold text-marble">Change who does what</h2>
-            <div className="mt-3"><CrewRoles eid={eid} account={account} plan={plan} c={c} links={links} log={log} /></div>
-          </section>
-        )}
 
         {tab === 'record' && (
           <section className="border border-[#e5c27b]/40 bg-[#e5c27b]/[0.04] p-4">
-            <h2 className="text-lg font-semibold text-marble">{plan.patient.name}’s medical record</h2>
-            <p className="text-base text-marble/60">Private. Opening it is written in the medical log with your name.</p>
+            <h2 className="text-xl font-semibold text-marble">{plan.patient.name}’s medical record</h2>
             {!medicalAccessed ? (
               <div className="mt-3 flex flex-wrap items-end gap-3">
-                <label className="min-w-[220px] flex-1 text-base text-marble/70">Why do you need it?
+                <label className="min-w-[220px] flex-1 text-lg text-marble/70">Why do you need it?
                   <select value={accessReason} onChange={(event) => setAccessReason(event.target.value)} className="mt-1 min-h-14 w-full border border-marble/25 bg-[#080b11] px-3 text-lg text-marble">
                     <option>Emergency assessment</option>
                     <option>Check allergy or medication relevance</option>
                     <option>Review medical restriction or history</option>
                   </select>
                 </label>
-                <button type="button" onClick={openMedicalRecord} className="min-h-14 border-2 border-[#e5c27b]/70 px-5 text-lg font-semibold text-[#e5c27b] hover:bg-[#e5c27b]/10">OPEN THE RECORD</button>
+                <button type="button" onClick={openMedicalRecord} className="min-h-14 border-2 border-[#e5c27b]/70 px-5 text-lg font-semibold text-[#e5c27b]">OPEN (LOGGED)</button>
               </div>
             ) : (
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {([['Allergies', relevantMedical.allergies], ['Medications', relevantMedical.medications], ['Restrictions', relevantMedical.restrictions], ['History', relevantMedical.history]] as const).map(([label, values]) => (
                   <div key={label} className="border border-marble/10 p-3">
-                    <div className="text-sm tracking-wide text-marble/50">{label.toUpperCase()}</div>
-                    <div className="mt-1 text-xl text-marble">{values.length ? values.join(', ') : 'None recorded'}</div>
+                    <div className="text-base text-marble/50">{label.toUpperCase()}</div>
+                    <div className="mt-1 text-2xl text-marble">{values.length ? values.join(', ') : 'None recorded'}</div>
                   </div>
                 ))}
               </div>
             )}
             {medicalAccessEvents.length > 0 && (
-              <ul className="mt-3 space-y-1 border-t border-marble/10 pt-2 text-sm text-marble/60">
+              <ul className="mt-3 space-y-1 border-t border-marble/10 pt-2 text-base text-marble/60">
                 {medicalAccessEvents.map((event) => event.type === 'medical-access' && <li key={event.id}>{hm(event.t)} · opened by {crew.find((member) => member.id === event.by)?.name ?? event.by} · {event.reason}</li>)}
               </ul>
             )}
@@ -381,31 +458,17 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
 
         {tab === 'earth' && (
           <section className="border border-[#8fb8ff]/40 bg-[#8fb8ff]/[0.06] p-4">
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-marble"><Satellite size={20} className="text-[#8fb8ff]" /> Earth is updated automatically</h2>
-            <p className="mt-1 text-lg text-marble">{earthLine}. <span className="text-marble/60">A new update goes when anything changes, at least every {UPDATE_EVERY_MIN} min. Private medical message.</span></p>
-            {reply && <p className="mt-2 border-l-4 border-[#8fb8ff] bg-[#8fb8ff]/10 px-3 py-2 text-xl text-[#d7e4ff]">Earth: {reply.body}</p>}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" onClick={sendReport} className="min-h-14 border-2 border-[#8fb8ff]/60 px-5 text-lg text-[#d7e4ff] hover:bg-[#8fb8ff]/10">SEND AN UPDATE NOW</button>
-              {lastReport && <button type="button" onClick={() => setReportOpen(!reportOpen)} className="min-h-14 border-2 border-marble/25 px-5 text-lg text-marble/80">{reportOpen ? 'HIDE THE REPORT' : 'SEE WHAT WAS SENT'}</button>}
-            </div>
-            {reportOpen && lastReport && <pre className="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap border border-marble/10 bg-void/70 p-3 font-sans text-base leading-relaxed text-marble/85">{lastReport.body}</pre>}
+            <p className="text-xl text-marble">Earth is updated automatically: {lastReport ? `${lastReport.report!.n === 1 ? 'first report' : `update ${lastReport.report!.n}`} ${lastReport.arrivesAt <= now ? 'arrived' : lastReport.arrivesAt - now < 60_000 ? 'arrives in seconds' : `arrives in ${Math.round((lastReport.arrivesAt - now) / 60_000)} min`}` : 'writing the first report'}.</p>
+            <button type="button" onClick={sendReport} className="mt-3 min-h-14 border-2 border-[#8fb8ff]/60 px-5 text-lg text-[#d7e4ff]">SEND AN UPDATE NOW</button>
+            {lastReport && <pre className="mt-3 max-h-80 overflow-y-auto whitespace-pre-wrap border border-marble/10 bg-void/70 p-3 font-sans text-base leading-relaxed text-marble/85">{lastReport.body}</pre>}
           </section>
         )}
 
         {tab === 'plan' && (
           <section className="space-y-3 border border-marble/15 bg-[#101721] p-4">
-            <h2 className="text-lg font-semibold text-marble">{plan.procedure ? `${plan.procedure.title} · v${plan.procedure.version}` : 'No approved procedure'}</h2>
-            <ol className="space-y-1">
-              {plan.tasks.map((t, i) => (
-                <li key={t.step.id} className={`flex gap-3 text-base ${t.status === 'done' ? 'text-marble/45' : 'text-marble/90'}`}>
-                  <span className="w-6 shrink-0 text-right text-marble/50">{i + 1}</span>
-                  <span className="flex-1">{t.step.ask?.question ?? t.step.text} <span className="text-sm text-marble/50">· {plan.roles[t.step.role]?.person?.name.split(' ')[0] ?? roleName[t.step.role]}{t.status === 'done' ? ' · done' : t.status === 'cannot' ? ' · could not do' : ''}</span></span>
-                </li>
-              ))}
-            </ol>
-            {(plan.warnings.length > 0 || plan.alerts.length > 1) && <p className="border-l-4 border-[#e39b4b] bg-[#e39b4b]/10 px-3 py-2 text-base text-[#f3c28d]">{[...plan.warnings, ...plan.alerts.slice(1)].join(' ')}</p>}
+            <PlannerOverview c={c} plan={plan} states={states} links={links} phase={phaseOf(missions[c.mission])} />
             <Reasoning title="HOW CHIRON BUILT THIS PLAN" steps={planReasoning(c, plan, states, links)} />
-            <button type="button" onClick={() => setShowHandover(!showHandover)} className="min-h-14 w-full border-2 border-marble/25 px-4 text-lg text-marble/85">{showHandover ? 'HIDE THE HANDOVER SUMMARY' : 'HANDOVER SUMMARY (FOR WHOEVER TAKES OVER)'}</button>
+            <button type="button" onClick={() => setShowHandover(!showHandover)} className="min-h-14 w-full border-2 border-marble/25 px-4 text-lg text-marble/85">{showHandover ? 'HIDE THE HANDOVER SUMMARY' : 'HANDOVER SUMMARY'}</button>
             {showHandover && <Handover c={c} plan={plan} states={states} />}
           </section>
         )}

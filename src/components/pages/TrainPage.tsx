@@ -59,11 +59,7 @@ export function TrainPage({ mission, crew, account, records, kb, onGuide, onStoc
           <h3 className="font-mono text-xs tracking-[0.2em] text-gold">WHAT TO DO TO BE READY</h3>
           <ul className="mt-2 space-y-2">
             {prep.todo.map((t) => <li key={t} className="border-l-2 border-gold pl-3 text-lg text-marble">{t}</li>)}
-            {myConcerns.length > 0 && (
-              <li className="border-l-2 border-[#e39b4b] pl-3 text-lg text-[#f3c28d]">
-                For you, {me.name.split(' ')[0]}: your {myConcerns.map((c) => c.name.toLowerCase()).join(' and ')} {myConcerns.length > 1 ? 'are' : 'is'} outside your normal. Follow “Back to your normal” in your profile and talk to the medical officer before {next.title}.
-              </li>
-            )}
+            {myConcerns.length > 0 && <li className="border-l-2 border-[#e39b4b] pl-3 text-lg text-[#f3c28d]">{me.name.split(' ')[0]}: CHIRON has personal advice for you. Open your profile.</li>}
           </ul>
           <div className="mt-2"><Reasoning steps={[
             { label: 'MISSION INFORMATION', lines: [`Next event: ${next.title}, mission day ${next.day} (today is day ${mission.today}).`, next.health] },

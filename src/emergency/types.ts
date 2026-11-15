@@ -5,6 +5,10 @@ export type Qualification = 'cmo' | 'cmo-backup' | 'life-support' | 'eva' | 'com
 export type RoleId = 'lead' | 'equipment' | 'earth' | 'monitor';
 
 export interface CrewMember {
+  pin?: string;                 // only for crew added from a file
+  added?: boolean;
+  duties?: string[];
+  band?: { location: string; activity: string };
   id: string;
   name: string;
   position: string;

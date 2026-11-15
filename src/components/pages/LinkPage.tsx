@@ -2,13 +2,13 @@ import { useMemo } from 'react';
 import { ArrowDownUp, BatteryLow, Lock, Siren, Watch } from 'lucide-react';
 import type { MissionId } from '../../types';
 import type { CrewMember, Procedure } from '../../emergency/types';
-import { buildPlan, casesFrom, rolesOf } from '../../emergency/plan';
+import { buildPlan, casesFrom } from '../../emergency/plan';
+import { crewLines } from '../../emergency/board';
+import { categoryText } from '../../emergency/report';
 import { publish, useLog } from '../../emergency/sync';
 import { HAPTICS, ago, type LinkStatus } from '../../link/link';
-import { LinkStrip } from './ProfilePage';
 import { PageShell, Panel, Tag } from './ui';
 import { LinkFlow } from './LinkFlow';
-import { accessRole } from '../../access/access';
 import { roleOf } from '../MissionDashboard';
 
 interface Props {
@@ -19,27 +19,31 @@ interface Props {
   now: number;
   onProfile: (id: string) => void;
   account: string;
+  onJoin: (eid: string) => void;
 }
 
 // CHIRON LINK: every astronaut's wearable, and what travels between it and CHIRON CORE.
-export function LinkPage({ mission, crew, links, kb, now, onProfile, account }: Props) {
-  const viewer = crew.find((c) => c.id === account);
-  const medical = !!viewer && accessRole(viewer) === 'medical';
+export function LinkPage({ mission, crew, links, kb, now, onProfile, account, onJoin }: Props) {
+  void account;
   const log = useLog();
-  // What CORE has sent to each band: the person's current emergency task, if any.
-  const sent = useMemo(() => {
-    const out: Record<string, string[]> = {};
+  // What each band shows during an emergency: the same assignment the emergency screen shows.
+  const band = useMemo(() => {
+    const out: Record<string, { eid: string; head: string; lines: string[]; tone: 'red' | 'gold' | 'plain' }[]> = {};
     const cases = casesFrom(log);
     for (const c of cases.filter((x) => !x.ended && x.mission === mission)) {
       const plan = buildPlan(c, kb, log, cases);
-      for (const m of crew) {
-        if (m.id === c.patientId) { (out[m.id] ??= []).push('Emergency alert: you are the patient. Your crew is coming.'); continue; }
-        const task = plan.tasks.find((t) => rolesOf(plan.roles, m.id).includes(t.step.role) && t.status === 'ready');
-        (out[m.id] ??= []).push(task ? `New task: ${task.step.text}` : `Emergency alert: ${plan.patient.name} needs help.`);
+      for (const l of crewLines(c, plan, log, links)) {
+        const what = categoryText[c.category];
+        const entry = l.state === 'PATIENT'
+          ? { eid: c.eid, head: 'MEDICAL EMERGENCY ACTIVE', tone: 'red' as const, lines: [`${l.member.name} · ${what}`, plan.roles.lead.person ? `${plan.roles.lead.person.name.split(' ')[0]} is leading. Stay still: your crew is helping.` : 'Stay still: your crew is helping.', `Crew progress: ${plan.tasks.filter((t) => t.status === 'done' || t.status === 'cannot').length} of ${plan.tasks.length} steps`] }
+          : l.state === 'ASSIGNED'
+            ? { eid: c.eid, head: 'EMERGENCY — TASK ASSIGNED', tone: 'gold' as const, lines: [`${plan.patient.name.split(' ')[0]} · ${what}`, `Your role: ${l.roleText}`, `Now: ${l.responsibility}`, `Status: ${l.taskState} · step ${Math.min(l.done + 1, l.total)} of ${l.total}`] }
+            : { eid: c.eid, head: 'EMERGENCY — NO TASK ASSIGNED', tone: 'plain' as const, lines: [`${plan.patient.name.split(' ')[0]} · ${what}`, 'Remain available. Follow updates from CHIRON.', `Your status: ${l.state}${l.why ? ` (${l.why})` : ''}`] };
+        (out[l.member.id] ??= []).push(entry);
       }
     }
     return out;
-  }, [log, kb, crew, mission]);
+  }, [log, kb, links, mission]);
 
   const pressButton = (l: LinkStatus) => {
     const hr = l.readings.find((r) => r.key === 'hr');
@@ -62,7 +66,7 @@ export function LinkPage({ mission, crew, links, kb, now, onProfile, account }: 
 
       {crew.map((c) => {
         const l = links[c.id];
-        const msgs = sent[c.id] ?? [];
+        const msgs = band[c.id] ?? [];
         return (
           <Panel key={c.id} title={c.name.toUpperCase()} tone={l.connected ? undefined : 'warn'}>
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-marble/75">
@@ -74,25 +78,19 @@ export function LinkPage({ mission, crew, links, kb, now, onProfile, account }: 
               <span className="text-gold">{roleOf(c)}</span>
               <span className={!l.connected ? 'text-[#f3c28d]' : l.eva || /EVA/.test(l.activity) ? 'text-[#f3c28d]' : 'text-[#7bd5b8]'}>{!l.connected ? 'Availability unknown' : l.eva ? 'Busy: on EVA' : /EVA/.test(l.activity) ? 'Busy: EVA preparation' : 'Available to help'}</span>
             </div>
-            {medical || c.id === account
-              ? <div className="mt-3"><LinkStrip link={l} now={now} /></div>
-              : <p className="mt-3 flex items-center gap-2 text-base text-marble/55"><Lock size={16} /> Readings are private: only {c.name.split(' ')[0]} and the medical officers see them.{l.warnings.length > 0 && <span className="text-[#ff9c9c]"> A health warning is active.</span>}</p>}
+            {<p className="mt-3 flex items-center gap-2 text-base text-marble/55"><Lock size={16} /> Readings are private: open {c.name.split(' ')[0]}’s profile to see them.{l.warnings.length > 0 && <span className="text-[#ff9c9c]"> A health warning is active.</span>}</p>}
             {l.connected && <div className="mt-3"><LinkFlow link={l} name={c.name} now={now} onProfile={() => onProfile(c.id)} /></div>}
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div>
-                <div className="flex items-center gap-2 font-mono text-[11px] tracking-[0.2em] text-marble/50"><ArrowDownUp size={14} /> SENT FROM CORE TO THIS BAND</div>
-                {msgs.length === 0 ? <p className="mt-1 text-sm text-marble/60">Nothing right now.</p> : (
-                  <ul className="mt-1 space-y-1 text-sm">
-                    {msgs.map((m) => (
-                      <li key={m} className="text-marble">
-                        {m}<br />
-                        <span className={l.connected ? 'text-[#7bd5b8]' : 'text-[#f3c28d]'}>
-                          {l.connected ? `Delivered · vibrated ${m.startsWith('New task') ? '● ●' : '● ● ● ● ●'} · receipt confirmed` : 'NOT DELIVERED: band offline. Tell them in person.'}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <div className="flex items-center gap-2 font-mono text-[11px] tracking-[0.2em] text-marble/50"><ArrowDownUp size={14} /> ON THIS BAND NOW</div>
+                {msgs.length === 0 ? <p className="mt-1 text-base text-marble/60">No emergency. Nothing to show.</p> : msgs.map((m) => (
+                  <div key={m.eid} className={`mt-2 rounded-2xl border-2 p-3 ${m.tone === 'red' ? 'border-[#e45b5b] bg-[#e45b5b]/10' : m.tone === 'gold' ? 'border-gold/70 bg-gold/[0.06]' : 'border-marble/25'}`}>
+                    <div className={`text-base font-bold ${m.tone === 'red' ? 'text-[#ff8585]' : m.tone === 'gold' ? 'text-gold' : 'text-marble/80'}`}>{m.head}</div>
+                    {m.lines.map((x) => <div key={x} className="text-base text-marble">{x}</div>)}
+                    <button type="button" onClick={() => onJoin(m.eid)} className="mt-2 min-h-12 w-full border border-marble/30 text-base font-semibold text-marble hover:border-gold">{m.tone === 'gold' ? 'VIEW INSTRUCTIONS' : 'OPEN THE EMERGENCY SCREEN'}</button>
+                    <div className={`mt-1 text-sm ${l.connected ? 'text-[#7bd5b8]' : 'text-[#f3c28d]'}`}>{l.connected ? 'Delivered to the band · vibrated ● ● ● ● ●' : 'NOT DELIVERED: band offline. Tell them in person.'}</div>
+                  </div>
+                ))}
               </div>
               <div>
                 <div className="font-mono text-[11px] tracking-[0.2em] text-marble/50">PHYSICAL EMERGENCY BUTTON</div>

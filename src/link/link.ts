@@ -4,6 +4,7 @@ import { indicatorById } from '../data/indicators';
 import { latestValue } from '../lib/health';
 import { outsideness } from '../data/simulate';
 import type { ChironEvent } from '../emergency/events';
+import { crew } from '../emergency/data';
 
 // CHIRON LINK: each astronaut's wearable, connected to CHIRON CORE.
 // ALL LINK DATA IS SIMULATED in this prototype: there is no real wearable hardware.
@@ -56,7 +57,8 @@ export function withLinkEvents(s: LinkStatus, log: ChironEvent[]): LinkStatus {
     if (!e || e.type !== 'link-reading') return r;
     const rule = WARNING_RULES.find((w) => w.key === r.key && w.test(e.value));
     if (rule) warnings.push({ key: r.key, label: r.label, value: e.value, unit: r.unit, rule: rule.rule, t: e.t });
-    return { ...r, value: e.value, t: e.t, live: true, outside: !!rule || r.outside };
+    // The band keeps measuring, so the reading's time is the band's latest sync, not when the value first appeared.
+    return { ...r, value: e.value, t: s.lastSync, live: true, outside: !!rule || r.outside };
   });
   const alerts = [...warnings.map((w) => `WARNING: ${w.label.toLowerCase()} ${w.value}${w.unit === '%' ? '' : ' '}${w.unit} (rule: ${w.rule}).`), ...s.alerts];
   return { ...s, readings, alerts, warnings };
@@ -88,7 +90,8 @@ export function useNow(everyMs = 10_000) {
 }
 
 export function linkFor(crewId: string, records: DayRecord[], now: number): LinkStatus {
-  const band = BANDS[crewId] ?? { connected: false, battery: 0, location: 'Unknown', eva: false, activity: 'Unknown', offlineHours: 24 };
+  const own = crew.find((c) => c.id === crewId)?.band;
+  const band = BANDS[crewId] ?? (own ? { connected: true, battery: 90, location: own.location, eva: false, activity: own.activity, offlineHours: undefined } : undefined) ?? { connected: false, battery: 0, location: 'Unknown', eva: false, activity: 'Unknown', offlineHours: 24 };
   const lastSync = band.connected ? now - 40_000 : now - (band.offlineHours ?? 24) * 3_600_000;
   const t = lastSync;
   const wobble = Math.sin(now / 60_000 + crewId.length);

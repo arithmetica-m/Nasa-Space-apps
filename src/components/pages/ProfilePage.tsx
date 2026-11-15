@@ -125,7 +125,7 @@ export function ProfilePage(p: Props) {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <h3 className="font-mono text-xs tracking-[0.2em] text-gold">ON THIS MISSION</h3>
-                <ul className="mt-2 space-y-1 text-lg text-marble">{(DUTIES[p.member.id] ?? []).map((d) => <li key={d}>• {d}</li>)}</ul>
+                <ul className="mt-2 space-y-1 text-lg text-marble">{(DUTIES[p.member.id] ?? p.member.duties ?? []).map((d) => <li key={d}>• {d}</li>)}</ul>
               </div>
               <div>
                 <h3 className="font-mono text-xs tracking-[0.2em] text-gold">TO DO NOW</h3>

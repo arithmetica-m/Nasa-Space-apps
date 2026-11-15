@@ -15,17 +15,19 @@ const severity = (category: string) => category === 'behavioral'
 // While the response screen is open, the reminder banner is hidden and the open emergency is not alarmed again.
 export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJoin }: { mission: MissionId; account: string; inResponse: boolean; viewingEid?: string; onJoin: (eid: string) => void }) {
   const log = useLog();
-  const cases = useMemo(() => casesFrom(log).filter((item) => !item.ended && item.mission === mission && item.startedBy !== account), [log, mission, account]);
+  const cases = useMemo(() => casesFrom(log).filter((item) => !item.ended && item.mission === mission), [log, mission]);
   const [acknowledged, setAcknowledged] = useState<Set<string>>(() => new Set());
   const [silenced, setSilenced] = useState<Set<string>>(() => new Set());
   const [audioError, setAudioError] = useState(false);
   const announced = useRef(new Set<string>());
   const audioContext = useRef<AudioContext>();
 
-  const newest = cases.find((item) => !acknowledged.has(item.eid) && item.eid !== viewingEid);
+  const newest = cases.find((item) => !acknowledged.has(item.eid) && item.eid !== viewingEid && item.startedBy !== account);
+  // An emergency already open on this device does not need its popup again.
+  useEffect(() => { if (viewingEid) setAcknowledged((previous) => (previous.has(viewingEid) ? previous : new Set(previous).add(viewingEid))); }, [viewingEid]);
 
   useEffect(() => {
-    const newCases = cases.filter((item) => !announced.current.has(item.eid));
+    const newCases = cases.filter((item) => !announced.current.has(item.eid) && item.startedBy !== account);
     for (const item of newCases) {
       announced.current.add(item.eid);
       speak(`Emergency. ${patientName(item.patientId).split(' ')[0]} needs help. Say emergency to open it.`);
@@ -33,7 +35,7 @@ export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJo
   }, [cases]);
 
   useEffect(() => {
-    const ringing = cases.filter((item) => !acknowledged.has(item.eid) && !silenced.has(item.eid) && item.eid !== viewingEid);
+    const ringing = cases.filter((item) => !acknowledged.has(item.eid) && !silenced.has(item.eid) && item.eid !== viewingEid && item.startedBy !== account);
     if (!ringing.length) return;
     let interval: number | undefined;
     try {
@@ -80,12 +82,12 @@ export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJo
     const all = casesFrom(log);
     const plan = buildPlan(newest, procedures, log, all);
     const roles = rolesOf(plan.roles, account);
-    return roles.length ? `You are: ${roles.map((r) => roleName[r]).join(' and ')}.` : 'No task for you yet. Stay close.';
+    return roles.length ? `TASK ASSIGNED: ${roles.map((r) => roleName[r]).join(' and ')}.` : 'NO TASK ASSIGNED. Remain available. Follow updates from CHIRON.';
   })();
 
   return (
     <>
-      {!inResponse && cases.filter((item) => acknowledged.has(item.eid)).map((item) => (
+      {!inResponse && cases.filter((item) => acknowledged.has(item.eid) || item.startedBy === account).map((item) => (
         <div key={item.eid} className="fixed inset-x-3 bottom-20 z-[45] mx-auto flex max-w-3xl items-center gap-3 border border-[#ff7070]/60 bg-[#160c10]/95 px-4 py-3 shadow-xl backdrop-blur">
           <Siren size={18} className="shrink-0 animate-pulse text-[#ff8585]" />
           <div className="mr-auto min-w-0">
@@ -106,7 +108,7 @@ export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJo
             <p className="mt-3 border-l-4 border-gold bg-gold/10 px-4 py-3 text-2xl text-marble">{myPart}</p>
             {audioError && <p className="mt-3 text-base text-[#e39b4b]">No alarm sound in this browser.</p>}
             <button type="button" onClick={() => { acknowledge(newest.eid); onJoin(newest.eid); }} className="mt-5 min-h-24 w-full text-3xl font-bold text-[#130709]" style={{ backgroundColor: severity(newest.category).color }}>
-              {newest.patientId === account ? 'OPEN' : 'GO TO MY TASK'}
+              OPEN THE EMERGENCY SCREEN
             </button>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <button type="button" onClick={() => silence(newest.eid)} className="flex min-h-16 items-center justify-center gap-2 border-2 border-marble/25 px-4 text-lg text-marble/85 hover:border-marble/50">
