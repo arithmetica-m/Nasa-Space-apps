@@ -191,6 +191,17 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
     publish({ type: 'measure', eid: c.eid, by: account, key, value, source: 'manual' });
     setDraft((current) => ({ ...current, [key]: '' }));
   };
+  const syncDemoCuff = () => {
+    const value = '118/76';
+    const error = measurementError('bp', value);
+    if (error) {
+      setMeasurementErrors((current) => ({ ...current, bp: error }));
+      return;
+    }
+    publish({ type: 'measure', eid: c.eid, by: account, key: 'bp', value, source: 'device' });
+    setDraft((current) => ({ ...current, bp: '' }));
+    setMeasurementErrors((current) => ({ ...current, bp: '' }));
+  };
 
   // Voice: done / yes / no / can't / repeat / confirm act on this device's own step.
   voiceRef.current = (action) => {
@@ -372,20 +383,23 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
                 {s.value !== undefined ? (
                   <>
                     <div className="text-4xl font-bold text-marble">{s.value}</div>
-                    <div className="text-base text-marble/60">{s.t ? hm(s.t) : ''} · {s.live ? 'LINK band, live (simulated)' : s.source}</div>
+                    <div className="text-base text-marble/60">{s.t ? hm(s.t) : ''} · {s.live ? 'Auto-synced from LINK band (simulated)' : s.source}</div>
                     {s.live && <button type="button" onClick={() => publish({ type: 'measure', eid, by: account, key: s.m.key, value: s.value!, source: 'link' })} className="mt-1 min-h-11 border border-gold/60 px-3 text-base text-gold">Save to the record</button>}
                   </>
                 ) : null}
                 {s.value === undefined && <div className="text-2xl font-bold text-[#f3c28d]">NOT RECORDED</div>}
                 {s.m.source === 'manual' && (
+                  <>
                   <div className="mt-1 flex gap-1">
-                    <input type={s.m.key === 'bp' ? 'text' : 'number'} inputMode={s.m.key === 'bp' ? 'text' : 'decimal'} min={numericRange(s.m.key)?.min} max={numericRange(s.m.key)?.max} step={numericRange(s.m.key)?.integer ? 1 : 'any'}
+                    <input type={numericRange(s.m.key) ? 'number' : 'text'} inputMode={numericRange(s.m.key) ? 'decimal' : 'text'} min={numericRange(s.m.key)?.min} max={numericRange(s.m.key)?.max} step={numericRange(s.m.key)?.integer ? 1 : 'any'}
                       value={draft[s.m.key] ?? ''} onChange={(e) => { const value = e.target.value; setDraft((d) => ({ ...d, [s.m.key]: value })); setMeasurementErrors((current) => ({ ...current, [s.m.key]: value.trim() ? measurementError(s.m.key, value) ?? '' : '' })); }} aria-label={s.m.label} aria-invalid={!!measurementErrors[s.m.key]} aria-describedby={measurementErrors[s.m.key] ? `${s.m.key}-error` : undefined} placeholder={s.m.key === 'bp' ? '120/80' : s.m.unit ?? 'value'}
                       onKeyDown={(e) => { if (e.key === 'Enter') saveMeasurement(s.m.key); }}
                       className="min-h-12 w-full min-w-0 border-2 border-marble/30 bg-transparent px-2 text-xl text-marble" />
                     <button type="button" disabled={!(draft[s.m.key] ?? '').trim()} onClick={() => saveMeasurement(s.m.key)}
                       className="min-h-12 shrink-0 bg-gold px-3 text-lg font-semibold text-void disabled:opacity-40">{s.value === undefined ? 'SAVE' : 'UPDATE'}</button>
                   </div>
+                  {s.m.key === 'bp' && <button type="button" onClick={syncDemoCuff} className="mt-2 min-h-11 border border-gold/60 px-3 text-sm text-gold">SYNC BLOOD-PRESSURE CUFF · SIMULATED</button>}
+                  </>
                 )}
                 {measurementErrors[s.m.key] && <p id={`${s.m.key}-error`} role="alert" className="mt-1 text-sm text-[#ff9c9c]">{measurementErrors[s.m.key]}</p>}
               </li>

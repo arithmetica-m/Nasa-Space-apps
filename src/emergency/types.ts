@@ -56,6 +56,7 @@ export interface Step {
   id: string;
   role: RoleId;
   text: string;
+  summary?: string;
   why: string;
   equipment?: string[];
   // 'confirm': the person doing it confirms. 'clinical': the medical lead must verify before moving on.

@@ -53,13 +53,13 @@ const nameOf = (id: string) => baseCrew.find((m) => m.id === id)?.name.split(' '
 // Everything that happened, newest first, each with its time.
 export function liveUpdates(c: EmergencyCase, plan: Plan, log: ChironEvent[], now: number): Update[] {
   const out: Update[] = [{ t: c.startedAt, text: `Emergency started by ${nameOf(c.startedBy)}${c.reason ? ` (${c.reason})` : ''}`, tone: 'red' }];
-  const stepText = (id: string) => { const s = plan.tasks.find((t) => t.step.id === id)?.step; return s ? s.ask?.question ?? s.text : id; };
+  const stepText = (id: string) => { const s = plan.tasks.find((t) => t.step.id === id)?.step; return s ? s.summary ?? s.ask?.question ?? s.text : id; };
   for (const [id, o] of Object.entries(c.outcomes)) {
-    out.push(o.outcome === 'cannot' ? { t: o.t, text: `${nameOf(o.by)} could not do: ${stepText(id)}`, tone: 'amber' }
-      : o.outcome === 'done' ? { t: o.t, text: `${nameOf(o.by)} finished: ${stepText(id)}`, tone: 'plain' }
-        : { t: o.t, text: `${stepText(id)} → ${o.outcome.toUpperCase()} (${nameOf(o.by)})`, tone: 'plain' });
+    out.push(o.outcome === 'cannot' ? { t: o.t, text: `${nameOf(o.by)} couldn't: ${stepText(id)}`, tone: 'amber' }
+      : o.outcome === 'done' ? { t: o.t, text: `${nameOf(o.by)}: ${stepText(id)}`, tone: 'plain' }
+        : { t: o.t, text: `${stepText(id)} — ${o.outcome.toUpperCase()} (${nameOf(o.by)})`, tone: 'plain' });
   }
-  for (const m of c.measures) out.push({ t: m.t, text: `${plan.procedure?.measurements?.find((x) => x.key === m.key)?.label ?? m.key}: ${m.value} (${m.source === 'link' ? 'LINK band, simulated' : `measured by ${nameOf(m.by)}`})`, tone: 'plain' });
+  for (const m of c.measures) out.push({ t: m.t, text: `${plan.procedure?.measurements?.find((x) => x.key === m.key)?.label ?? m.key}: ${m.value} (${m.source === 'link' ? 'LINK band, simulated' : m.source === 'device' ? 'blood-pressure cuff, simulated' : `measured by ${nameOf(m.by)}`})`, tone: 'plain' });
   for (const [role, a] of Object.entries(c.assignments) as [RoleId, { crewId: string; t: number; by: string }][]) out.push({ t: a.t, text: `${roleName[role]} is now ${nameOf(a.crewId)} (changed by ${nameOf(a.by)})`, tone: 'amber' });
   for (const e of log) {
     if (e.type === 'vitals' && e.eid === c.eid) out.push({ t: e.t, text: `${nameOf(e.by)} observed: ${e.note}`, tone: /worse|harder|not responding/i.test(e.note ?? '') ? 'red' : 'plain' });
@@ -76,7 +76,7 @@ export function liveUpdates(c: EmergencyCase, plan: Plan, log: ChironEvent[], no
 export interface SituationLine { text: string; tone: 'red' | 'amber' | 'plain'; t?: number }
 export function situation(c: EmergencyCase, plan: Plan, states: { m: { key: string; label: string }; value?: string; t?: number; live?: boolean; source?: string }[], log: ChironEvent[], patientLink?: LinkStatus): SituationLine[] {
   const out: SituationLine[] = [{ text: `Reported event: ${categoryText[c.category]}`, tone: 'amber', t: c.startedAt }];
-  if (c.reason && !/voice/i.test(c.reason)) out.push({ text: `Crew-reported symptoms: ${c.reason}`, tone: 'plain', t: c.startedAt });
+  if (c.reason && !/voice/i.test(c.reason)) out.push({ text: `Symptoms: ${c.reason}`, tone: 'plain', t: c.startedAt });
 
   const steps = new Map((plan.procedure?.steps ?? []).map((step) => [step.id, step]));
   for (const [stepId, outcome] of Object.entries(c.outcomes)) {
@@ -95,15 +95,16 @@ export function situation(c: EmergencyCase, plan: Plan, states: { m: { key: stri
   const observations = log.filter((e) => e.type === 'vitals' && e.eid === c.eid && e.note);
   for (const group of observationGroups) {
     const latest = [...observations].reverse().find((e) => e.type === 'vitals' && group.labels.includes(e.note ?? ''));
-    if (latest?.type === 'vitals') {
-      const tone = new Set(['Breathing difficulty observed', 'Visible swelling observed', 'Rash observed', 'Faintness or collapse observed', 'Not responding', 'Breathing harder']).has(latest.note ?? '') ? 'red' : 'plain';
-      out.push({ text: `Crew observation: ${latest.note}`, tone, t: latest.t });
+    if (latest?.type === 'vitals' && latest.note) {
+      const tone = new Set(['Breathing difficulty observed', 'Visible swelling observed', 'Rash observed', 'Faintness or collapse observed', 'Not responding', 'Breathing harder']).has(latest.note) ? 'red' : 'plain';
+      out.push({ text: latest.note, tone, t: latest.t });
     }
   }
   const recognized = new Set(observationGroups.flatMap((group) => group.labels));
   const latestOtherObservation = [...observations].reverse().find((event) => event.type === 'vitals' && event.note && !recognized.has(event.note));
-  if (latestOtherObservation?.type === 'vitals' && latestOtherObservation.note) {
-    out.push({ text: `Crew-reported observation: ${latestOtherObservation.note}`, tone: /worse|harder|not responding/i.test(latestOtherObservation.note) ? 'red' : 'plain', t: latestOtherObservation.t });
+  const otherNote = latestOtherObservation?.type === 'vitals' ? latestOtherObservation.note : undefined;
+  if (latestOtherObservation?.type === 'vitals' && otherNote) {
+    out.push({ text: otherNote, tone: /worse|harder|not responding/i.test(otherNote) ? 'red' : 'plain', t: latestOtherObservation.t });
   }
 
   // Latest valid readings only. Plausibility checks are data-quality safeguards, not diagnoses.

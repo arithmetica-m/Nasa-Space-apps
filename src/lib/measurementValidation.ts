@@ -44,7 +44,8 @@ export function measurementError(key: string, value: string): string | undefined
     if (!match) return 'Enter blood pressure as systolic/diastolic, for example 120/80.';
     const systolic = Number(match[1]);
     const diastolic = Number(match[2]);
-    if (systolic < 40 || systolic > 300 || diastolic < 20 || diastolic > 200 || systolic <= diastolic) {
+    const pulsePressure = systolic - diastolic;
+    if (systolic < 50 || systolic > 250 || diastolic < 30 || diastolic > 150 || pulsePressure < 10 || pulsePressure > 150) {
       return 'Check the blood pressure: the numbers are outside plausible recording bounds.';
     }
     return undefined;

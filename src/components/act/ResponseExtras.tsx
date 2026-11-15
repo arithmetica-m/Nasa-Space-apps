@@ -29,10 +29,10 @@ export function measureStates(c: EmergencyCase, plan: Plan, patientLink?: LinkSt
       return !after.length || after.some((stepId) => c.outcomes[stepId]?.outcome === 'done');
     })
     .map((m) => {
-    const rec = [...c.measures].reverse().find((x) => x.key === m.key);
-    if (rec) return { m, value: rec.value, source: rec.source === 'link' ? 'LINK wearable (simulated), added to the record' : `entered by ${nameOf(rec.by)}`, t: rec.t };
     const lr = m.source === 'link' ? patientLink?.readings.find((r) => r.key === m.key) : undefined;
-    if (lr && lr.value !== undefined && lr.live) return { m, value: `${lr.value} ${lr.unit}`, source: 'LINK wearable, live (simulated)', t: lr.t, live: true };
+    const rec = [...c.measures].reverse().find((x) => x.key === m.key);
+    if (lr && lr.value !== undefined && lr.live && lr.t !== undefined && (!rec || lr.t > rec.t)) return { m, value: `${lr.value} ${lr.unit}`, source: 'LINK wearable, live (simulated)', t: lr.t, live: true };
+    if (rec) return { m, value: rec.value, source: rec.source === 'link' ? 'LINK wearable (simulated), added to the record' : rec.source === 'device' ? 'blood-pressure cuff (simulated)' : `entered by ${nameOf(rec.by)}`, t: rec.t };
     return { m };
   });
 }

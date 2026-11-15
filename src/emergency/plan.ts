@@ -39,7 +39,7 @@ export interface EmergencyCase {
   outcomes: Record<string, { outcome: 'done' | 'cannot' | 'yes' | 'no'; by: string; t: number }>;
   verified: Set<string>;
   vitals: { t: number; by: string; spo2?: number; hr?: number; note?: string }[];
-  measures: { key: string; value: string; source: 'manual' | 'link'; t: number; by: string }[];
+  measures: { key: string; value: string; source: 'manual' | 'link' | 'device'; t: number; by: string }[];
   assignments: Partial<Record<RoleId, { crewId: string; t: number; by: string }>>;
   messages: EarthMessage[];
 }
