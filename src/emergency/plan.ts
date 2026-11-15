@@ -102,7 +102,7 @@ export interface Plan {
 export function buildPlan(c: EmergencyCase, kb: Procedure[], log: ChironEvent[], allCases: EmergencyCase[]): Plan {
   const crew = crewNow(log);
   // Patients in other active emergencies cannot help here.
-  const busyPatients = new Set(allCases.filter((x) => !x.ended && x.eid !== c.eid).map((x) => x.patientId));
+  const busyPatients = new Set(allCases.filter((x) => !x.ended && x.eid !== c.eid && x.mission === c.mission).map((x) => x.patientId));
   const pool = crew.map((m) => (busyPatients.has(m.id) ? { ...m, available: false } : m));
   const patient = crew.find((m) => m.id === c.patientId)!;
   const { procedure, reason } = resolveProcedure(kb, c.category, c.mission);

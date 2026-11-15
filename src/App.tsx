@@ -329,8 +329,9 @@ export default function App() {
     try { seen = JSON.parse(sessionStorage.getItem('chiron-seen-emergencies') ?? '[]'); } catch { /* ignore */ }
     if (seen.includes(newest.eid)) return;
     try { sessionStorage.setItem('chiron-seen-emergencies', JSON.stringify([...seen, newest.eid])); } catch { /* ignore */ }
-    // Close any open medical profile or check-in: the device becomes the common dashboard.
-    setPage('home'); setSelectedProfile(undefined); setCheckInOpen(false); setPendingCheckIn(false);
+    // Sign out and close any open medical profile or check-in: the device becomes the common dashboard.
+    // Voice stays on, so the crew can keep using it during the emergency.
+    setAccount(''); setPage('home'); setSelectedProfile(undefined); setCheckInOpen(false); setCheckInFor(undefined); setPendingCheckIn(false);
     if (mode !== 'act') joinAct(newest.eid);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCases, signedIn]);
