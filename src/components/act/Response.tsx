@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Mic, ShieldCheck, Users, Volume2, VolumeX } from 'lucide-react';
-import { crewLines, liveUpdates } from '../../emergency/board';
+import { crewLines, liveUpdates, situation } from '../../emergency/board';
 import { missions } from '../../data/missions';
 import { buildEarthReport, categoryText, reportSignature } from '../../emergency/report';
 import { recordsFor } from '../../lib/crewHealth';
@@ -9,8 +9,8 @@ import { Reasoning } from '../Reasoning';
 import { medicalOf } from '../../library/advice';
 import { CrewRoles, Handover, PlannerOverview, measureStates, planReasoning } from './ResponseExtras';
 import { phaseOf } from '../MissionTimeline';
-import type { DemoMedicalProfile, Procedure, RoleId } from '../../emergency/types';
-import { DELAY_MIN, buildPlan, casesFrom, crewNow, roleName, rolesOf } from '../../emergency/plan';
+import type { DemoMedicalProfile, Procedure } from '../../emergency/types';
+import { DELAY_MIN, buildPlan, casesFrom, crewNow, rolesOf } from '../../emergency/plan';
 import { publish, useLog } from '../../emergency/sync';
 import { newId } from '../../emergency/events';
 import { crew } from '../../emergency/data';
@@ -70,7 +70,6 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const [readAloud, setReadAloud] = useState(true);
   const [ending, setEnding] = useState(false);
   const [view, setView] = useState<'main' | 'crew'>('main');
-  const [person, setPerson] = useState<string>();   // whose instructions are open on the crew screen
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [note, setNote] = useState('');
   const [showAll, setShowAll] = useState(false);
@@ -148,7 +147,6 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const isLead = myRoles.includes('lead');
   const isMedicalAccessAuthorized = isLead || !!me?.qualifications.some((qualification) => qualification === 'cmo' || qualification === 'cmo-backup');
   const mine = plan.tasks.filter((task) => myRoles.includes(task.step.role));
-  void me;
   const activeTask = mine.find((task) => task.status === 'ready')
     ?? mine.find((task) => task.status === 'blocked')
     ?? mine.find((task) => task.status === 'waiting');
@@ -178,71 +176,9 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const updates = liveUpdates(c, plan, log, now);
   const minutes = Math.max(0, Math.round((now - c.startedAt) / 60_000));
   const doneSteps = plan.tasks.filter((t) => t.status === 'done' || t.status === 'cannot').length;
-  const currentTask = plan.tasks.find((t) => t.status === 'ready') ?? plan.tasks.find((t) => t.status === 'blocked');
-  const nextTask = plan.tasks.find((t) => t !== currentTask && (t.status === 'waiting' || t.status === 'ready' || t.status === 'blocked'));
-  const who = (t?: { step: { role: RoleId } }) => (t ? plan.roles[t.step.role]?.person?.name.split(' ')[0] ?? roleName[t.step.role] : '');
   const textOf = (t: { step: { text: string; ask?: { question: string } } }) => t.step.ask?.question ?? t.step.text;
 
-  // What needs attention now, most serious first.
-  const urgent: { text: string; tone: 'red' | 'amber' }[] = [
-    ...plan.alerts.map((a) => ({ text: a, tone: 'red' as const })),
-    ...(plan.missing ? [{ text: 'No approved procedure in CHIRON for this. Use the paper emergency card.', tone: 'red' as const }] : []),
-    ...plan.tasks.filter((t) => t.status === 'blocked').map((t) => ({ text: `Missing equipment for “${textOf(t)}”: ${t.blockedBy ?? 'ask the medical lead'}`, tone: 'red' as const })),
-    ...plan.tasks.filter((t) => t.status === 'ready' && t.step.verify === 'clinical' && !c.verified.has(t.step.id)).map((t) => ({ text: `${who(t)} must confirm: ${textOf(t)}`, tone: 'amber' as const })),
-    ...states.filter((s) => s.value === undefined).map((s) => ({ text: `${s.m.unit ? 'Measure' : 'Find out'} now: ${s.m.label}`, tone: 'amber' as const })),
-    ...lines.filter((l) => l.state === 'ASSIGNED' && links[l.member.id] && !links[l.member.id].connected).map((l) => ({ text: `${l.member.name.split(' ')[0]}’s band is offline: tell them their task in person`, tone: 'amber' as const })),
-  ];
-
-  // One person's current instruction, with the buttons to act on it.
-  const stepCard = (actorId: string) => {
-    const line = lines.find((l) => l.member.id === actorId)!;
-    const roles = line.roles;
-    const theirs = plan.tasks.filter((t) => roles.includes(t.step.role));
-    const task = line.current;
-    const lead = roles.includes('lead');
-    const text = !task ? '' : task.status === 'waiting' ? 'Wait for your crew.' : task.status === 'blocked' ? 'Get the medical lead.' : textOf(task);
-    const confirm = !!task && task.status === 'ready' && task.step.verify === 'clinical' && !c.verified.has(task.step.id);
-    const act = (outcome: 'done' | 'cannot' | 'yes' | 'no') => { publish({ type: 'step', eid, by: actorId, stepId: task!.step.id, outcome }); setCannot(undefined); };
-    const first = line.member.name.split(' ')[0];
-    if (line.state === 'PATIENT') return <p className="border-2 border-[#e45b5b]/50 bg-[#e45b5b]/[0.06] p-5 text-2xl text-marble">{first} is the patient. Stay still: the crew is helping.</p>;
-    if (!theirs.length) return <p className="border-2 border-marble/20 p-5 text-2xl text-marble">NO TASK ASSIGNED. Remain available. Follow updates from CHIRON.</p>;
-    if (!task) return <p className="border-2 border-[#5cc8a8]/50 bg-[#5cc8a8]/[0.06] p-5 text-2xl text-marble">All of {first}’s steps are done.</p>;
-    return (
-      <section aria-live="polite" className={`border-2 p-5 md:p-7 ${task.status === 'ready' ? 'border-[#e45b5b]/70 bg-[#101721]' : 'border-[#e39b4b]/60 bg-[#e39b4b]/[0.06]'}`}>
-        {readAloud && actorId === account && <SpeakStep key={`${task.step.id}-${task.status}`} text={text} />}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-lg text-[#ff9c9c]">
-          <span className="font-semibold">{actorId === account ? 'YOUR STEP' : `${first.toUpperCase()}’S STEP`} {Math.min(line.done + 1, line.total)} OF {line.total}</span>
-          <span className="text-marble/60">{line.roleText}</span>
-        </div>
-        <div className="mt-2 flex gap-1" aria-hidden="true">{theirs.map((t) => <span key={t.step.id} className={`h-2 flex-1 ${t.status === 'done' || t.status === 'cannot' ? 'bg-[#5cc8a8]' : t === task ? 'bg-[#e45b5b]' : 'bg-marble/15'}`} />)}</div>
-        <h2 className="mt-4 text-3xl font-semibold leading-tight text-marble md:text-5xl">{text}</h2>
-        {task.status !== 'ready' && <p className="mt-3 text-xl text-[#f3c28d]">{task.status === 'waiting' ? 'Another step must finish first.' : `Missing equipment: ${task.blockedBy ?? 'ask the medical lead'}.`}</p>}
-        {task.status === 'ready' && task.step.ask && (
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <button onClick={() => act('yes')} className="min-h-24 border-2 border-marble/50 bg-marble/[0.06] text-3xl font-semibold text-marble hover:bg-marble/15">YES</button>
-            <button onClick={() => act('no')} className="min-h-24 border-2 border-marble/50 bg-marble/[0.06] text-3xl font-semibold text-marble hover:bg-marble/15">NO</button>
-          </div>
-        )}
-        {confirm && (lead
-          ? <button type="button" onClick={() => publish({ type: 'verify', eid, by: actorId, stepId: task.step.id })} className="mt-5 flex min-h-20 w-full items-center justify-center gap-3 border-2 border-[#5cc8a8] bg-[#5cc8a8]/10 px-4 text-xl font-semibold text-[#9be3cc]"><ShieldCheck size={26} /> CONFIRM: THE CHECKLIST WAS FOLLOWED</button>
-          : <p className="mt-5 border-l-4 border-[#e39b4b] bg-[#e39b4b]/10 px-4 py-3 text-xl text-[#f3c28d]">Waiting for {plan.roles.lead.person?.name.split(' ')[0] ?? 'the medical lead'} to confirm.</p>)}
-        {task.status === 'ready' && !task.step.ask && !confirm && (
-          <button onClick={() => act('done')} className="mt-5 flex min-h-24 w-full items-center justify-center gap-3 bg-[#e45b5b] px-5 text-3xl font-bold text-[#16090a] hover:bg-[#ff8585]"><Check size={34} strokeWidth={3} /> DONE</button>
-        )}
-        {cannot === task.step.id ? (
-          <div className="mt-4 border-2 border-[#e39b4b]/70 bg-[#e39b4b]/10 p-4">
-            <p className="text-2xl text-marble">{task.step.ifCannot ?? 'Tell the medical lead.'}</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <button onClick={() => act('cannot')} className="min-h-16 bg-[#e39b4b] px-5 text-xl font-semibold text-[#17100a]">RECORD AND GO ON</button>
-              <button onClick={() => setCannot(undefined)} className="min-h-16 border-2 border-marble/30 px-5 text-xl text-marble/80">BACK TO THE STEP</button>
-            </div>
-          </div>
-        ) : task.status === 'ready' && (
-          <button onClick={() => setCannot(task.step.id)} className="mt-3 min-h-16 w-full border-2 border-marble/25 px-5 text-xl text-marble/75 hover:border-marble/50">I CAN’T DO THIS</button>
-        )}
-      </section>
-    );
-  };
+  const happening = situation(c, plan, states, log, links[c.patientId]);
 
   // Voice: done / yes / no / can't / repeat / confirm act on this device's own step.
   voiceRef.current = (action) => {
@@ -262,6 +198,9 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
     }
   };
 
+  // This device reads its own person's current step aloud, once, when it appears.
+  const speakNow = readAloud && !isPatient && activeTask?.status === 'ready' ? <SpeakStep key={activeTask.step.id} text={`${me?.name.split(' ')[0] ?? ''}: ${textOf(activeTask)}`} /> : null;
+
   const header = (
     <header className="sticky top-0 z-10 border-b-4 border-[#e45b5b] bg-[#1a0c0e] px-4 py-3 md:px-8">
       <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3">
@@ -270,7 +209,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
           <h1 className="text-3xl font-bold leading-tight text-marble md:text-5xl">{plan.patient.name}</h1>
           <div className="text-xl text-marble/90 md:text-2xl">{categoryText[c.category]}</div>
         </div>
-        <button type="button" onClick={() => { setView(view === 'crew' ? 'main' : 'crew'); setPerson(undefined); }}
+        <button type="button" onClick={() => setView(view === 'crew' ? 'main' : 'crew')}
           className="flex min-h-16 items-center gap-2 bg-marble px-5 text-lg font-bold text-void hover:bg-white">
           <Users size={22} /> {view === 'crew' ? 'BACK TO THE PATIENT' : 'VIEW CREW ASSIGNMENTS'}
         </button>
@@ -293,26 +232,68 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
     return (
       <div className="absolute inset-0 z-30 flex flex-col overflow-y-auto bg-[#080b11]">
         {header}
+        {speakNow}
         <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 p-4 pb-16 md:p-6">
-          <h2 className="text-2xl font-semibold text-marble">ASSIGNED</h2>
-          <ul className="grid gap-3 md:grid-cols-2">
-            {assigned.map((l) => (
-              <li key={l.member.id}>
-                <button type="button" onClick={() => setPerson(person === l.member.id ? undefined : l.member.id)} aria-pressed={person === l.member.id}
-                  className={`w-full border-2 p-4 text-left ${person === l.member.id ? 'border-gold bg-gold/10' : 'border-marble/20 hover:border-marble/50'}`}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-3xl font-semibold text-marble">{l.member.name}{l.member.id === account ? ' (you)' : ''}</span>
-                    <span className={`border-2 px-3 py-1 text-lg font-semibold ${stateColor[l.taskState!]}`}>{l.taskState}</span>
-                  </div>
-                  <div className="mt-1 text-2xl text-gold">{l.roleText}</div>
-                  <div className="mt-2 text-xl text-marble/85">{l.responsibility}</div>
-                  <div className="mt-2 text-base text-marble/55">Step {Math.min(l.done + 1, l.total)} of {l.total} · tap to open {l.member.name.split(' ')[0]}’s instructions</div>
-                </button>
-              </li>
-            ))}
-            {assigned.length === 0 && <li className="text-xl text-marble/70">Nobody has a task: no approved procedure is loaded.</li>}
-          </ul>
-          {person && <div>{stepCard(person)}</div>}
+          <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(280px, 1fr))` }}>
+            {assigned.map((l) => {
+              const theirs = plan.tasks.filter((t) => l.roles.includes(t.step.role));
+              const offline = links[l.member.id] && !links[l.member.id].connected;
+              return (
+                <section key={l.member.id} aria-label={l.member.name} className="border-2 border-marble/25 bg-[#101721]">
+                  <header className="border-b-2 border-marble/20 p-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <h2 className="text-3xl font-bold text-marble">{l.member.name.split(' ')[0]}</h2>
+                      <span className={`border-2 px-2 py-0.5 text-base font-semibold ${stateColor[l.taskState!]}`}>{l.taskState}</span>
+                    </div>
+                    <div className="text-xl text-gold">{l.roleText}</div>
+                    {offline && <div className="mt-1 text-lg text-[#f3c28d]">Band offline: tell them in person</div>}
+                  </header>
+                  <ol className="divide-y divide-marble/10">
+                    {theirs.map((t, i) => {
+                      const fin = t.status === 'done' || t.status === 'cannot';
+                      const now = t === l.current && t.status === 'ready';
+                      const confirm = now && t.step.verify === 'clinical' && !c.verified.has(t.step.id);
+                      const act = (outcome: 'done' | 'cannot' | 'yes' | 'no') => publish({ type: 'step', eid, by: l.member.id, stepId: t.step.id, outcome });
+                      return (
+                        <li key={t.step.id} className={`p-4 ${now ? 'bg-[#e45b5b]/10' : ''}`}>
+                          <div className="flex gap-3">
+                            <span className={`flex h-9 w-9 shrink-0 items-center justify-center border-2 text-lg font-bold ${fin ? 'border-[#5cc8a8] bg-[#5cc8a8]/20 text-[#7bd5b8]' : now ? 'border-[#e45b5b] text-[#ff8585]' : 'border-marble/30 text-marble/50'}`}>{fin ? <Check size={20} strokeWidth={3} /> : i + 1}</span>
+                            <p className={`text-2xl leading-snug ${fin ? 'text-marble/45 line-through' : now ? 'font-semibold text-marble' : 'text-marble/75'}`}>{textOf(t)}</p>
+                          </div>
+                          {t.status === 'cannot' && <p className="mt-1 pl-12 text-lg text-[#f3c28d]">Could not do this</p>}
+                          {t.status === 'blocked' && <p className="mt-1 pl-12 text-lg text-[#ff9c9c]">Missing equipment: {t.blockedBy ?? 'ask the medical lead'}</p>}
+                          {t.status === 'waiting' && t === l.current && <p className="mt-1 pl-12 text-lg text-marble/55">Waits for another step</p>}
+                          {now && (
+                            <div className="mt-3 grid gap-2 pl-12">
+                              {t.step.ask ? (
+                                <div className="grid grid-cols-2 gap-2">
+                                  <button onClick={() => act('yes')} className="min-h-16 border-2 border-marble/50 bg-marble/[0.06] text-2xl font-semibold text-marble">YES</button>
+                                  <button onClick={() => act('no')} className="min-h-16 border-2 border-marble/50 bg-marble/[0.06] text-2xl font-semibold text-marble">NO</button>
+                                </div>
+                              ) : confirm ? (
+                                l.roles.includes('lead')
+                                  ? <button onClick={() => publish({ type: 'verify', eid, by: l.member.id, stepId: t.step.id })} className="flex min-h-16 items-center justify-center gap-2 border-2 border-[#5cc8a8] bg-[#5cc8a8]/10 text-xl font-semibold text-[#9be3cc]"><ShieldCheck size={22} /> CONFIRM</button>
+                                  : <p className="text-lg text-[#f3c28d]">Waiting for the medical lead to confirm</p>
+                              ) : (
+                                <button onClick={() => act('done')} className="flex min-h-16 items-center justify-center gap-2 bg-[#e45b5b] text-2xl font-bold text-[#16090a]"><Check size={26} strokeWidth={3} /> DONE</button>
+                              )}
+                              {cannot === t.step.id ? (
+                                <div className="border-2 border-[#e39b4b]/70 bg-[#e39b4b]/10 p-3">
+                                  <p className="text-xl text-marble">{t.step.ifCannot ?? 'Tell the medical lead.'}</p>
+                                  <button onClick={() => { act('cannot'); setCannot(undefined); }} className="mt-2 min-h-14 w-full bg-[#e39b4b] text-lg font-semibold text-[#17100a]">RECORD AND GO ON</button>
+                                </div>
+                              ) : <button onClick={() => setCannot(t.step.id)} className="min-h-12 border-2 border-marble/25 text-lg text-marble/75">CAN’T DO THIS</button>}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </section>
+              );
+            })}
+            {assigned.length === 0 && <p className="text-2xl text-marble/80">No tasks: CHIRON has no approved procedure for this. Use the paper emergency card.</p>}
+          </div>
 
           <h2 className="pt-2 text-2xl font-semibold text-marble">NOT ASSIGNED</h2>
           <ul className="grid gap-3 md:grid-cols-2">
@@ -339,17 +320,21 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   return (
     <div className="absolute inset-0 z-30 flex flex-col overflow-y-auto bg-[#080b11]">
       {header}
+      {speakNow}
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 p-4 pb-16 md:p-6">
         {c.assignments.lead?.crewId === account && !handoverSeen && <Handover c={c} plan={plan} states={states} onClose={() => setHandoverSeen(true)} />}
 
-        {urgent.length > 0 && (
-          <section role="alert" aria-label="Urgent action required" className="border-4 border-[#e45b5b] bg-[#e45b5b]/10 p-4">
-            <h2 className="text-xl font-bold tracking-wide text-[#ff8585]">URGENT ACTION REQUIRED</h2>
-            <ul className="mt-2 space-y-2">
-              {urgent.map((u) => <li key={u.text} className={`border-l-8 pl-3 text-2xl font-semibold ${u.tone === 'red' ? 'border-[#e45b5b] text-marble' : 'border-[#e39b4b] text-[#ffd9a8]'}`}>{u.text}</li>)}
-            </ul>
-          </section>
-        )}
+        <section aria-label="What is happening" aria-live="polite" className="border-4 border-[#e45b5b] bg-[#e45b5b]/10 p-4">
+          <h2 className="text-xl font-bold tracking-wide text-[#ff8585]">WHAT IS HAPPENING TO {plan.patient.name.split(' ')[0].toUpperCase()}</h2>
+          <ul className="mt-2 space-y-2">
+            {happening.map((h, i) => (
+              <li key={i} className={`flex flex-wrap items-baseline gap-x-3 border-l-8 pl-3 ${i === 0 ? 'text-3xl font-bold' : 'text-2xl font-semibold'} ${h.tone === 'red' ? 'border-[#e45b5b] text-marble' : h.tone === 'amber' ? 'border-[#e39b4b] text-[#ffd9a8]' : 'border-marble/40 text-marble'}`}>
+                <span>{h.text}</span>{h.t && <span className="font-mono text-base font-normal text-marble/55">{hm(h.t).slice(0, 5)}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-lg text-marble/60">Crew steps done: {doneSteps} of {plan.tasks.length}</p>
+        </section>
 
         <section aria-label="Live health measurements">
           <h2 className="text-xl font-bold tracking-wide text-marble/70">MEASUREMENTS</h2>
@@ -382,23 +367,9 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
           {links[c.patientId] && !links[c.patientId].connected && <p className="mt-2 text-xl text-[#f3c28d]">{plan.patient.name.split(' ')[0]}’s LINK band is offline: no live readings. Measure by hand.</p>}
         </section>
 
-        <section aria-label="Current procedure step" className="border-2 border-marble/20 p-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-xl font-bold tracking-wide text-marble/70">PROCEDURE · STEP {Math.min(doneSteps + 1, plan.tasks.length)} OF {plan.tasks.length}</h2>
-            <span className="text-lg text-marble/60">{plan.procedure?.title}</span>
-          </div>
-          <div className="mt-2 flex gap-1" aria-hidden="true">{plan.tasks.map((t) => <span key={t.step.id} className={`h-3 flex-1 ${t.status === 'done' || t.status === 'cannot' ? 'bg-[#5cc8a8]' : t === currentTask ? 'bg-[#e45b5b]' : 'bg-marble/15'}`} />)}</div>
-          {currentTask ? <p className="mt-3 text-3xl font-semibold leading-tight text-marble">NOW: {textOf(currentTask)} <span className="text-2xl font-normal text-gold">· {who(currentTask)}</span></p>
-            : <p className="mt-3 text-3xl font-semibold text-[#7bd5b8]">{plan.tasks.length ? 'All steps are done.' : 'No steps: use the paper emergency card.'}</p>}
-          {nextTask && <p className="mt-1 text-xl text-marble/65">NEXT: {textOf(nextTask)} · {who(nextTask)}</p>}
-        </section>
-
-        {!isPatient && activeTask && stepCard(account)}
-        {isPatient && <p className="border-2 border-[#e45b5b]/50 bg-[#e45b5b]/[0.06] p-5 text-2xl text-marble">You are the patient. Stay still: your crew is helping you.</p>}
-
         <section aria-label="Live updates" className="border-2 border-marble/20 p-4">
           <h2 className="text-xl font-bold tracking-wide text-marble/70">LIVE UPDATES</h2>
-          {!isPatient && (
+          {(
             <div className="mt-2 flex flex-wrap gap-2">
               {['Awake and talking', 'Breathing easier', 'Breathing harder', 'Not responding'].map((o) => (
                 <button key={o} type="button" onClick={() => publish({ type: 'vitals', eid, by: account, note: o })} className="min-h-12 border-2 border-marble/25 px-3 text-lg text-marble hover:border-gold">{o}</button>

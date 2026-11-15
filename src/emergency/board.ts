@@ -2,7 +2,8 @@ import type { CrewMember, RoleId } from './types';
 import type { ChironEvent } from './events';
 import { crewNow, roleName, rolesOf, type EmergencyCase, type Plan, type Task } from './plan';
 import { crew as baseCrew } from './data';
-import type { LinkStatus } from '../link/link';
+import { WARNING_RULES, type LinkStatus } from '../link/link';
+import { categoryText } from './report';
 
 // THE EMERGENCY BOARD: who is assigned, who is available, and what happened, for the live
 // emergency screen and for each person's CHIRON LINK band. Both read the same shared log,
@@ -68,4 +69,32 @@ export function liveUpdates(c: EmergencyCase, plan: Plan, log: ChironEvent[], no
     if (m.report?.n === 1 && m.sentAt) out.push({ t: m.sentAt, text: 'First report sent to Earth. Updates follow automatically.', tone: 'plain' });
   }
   return out.sort((a, b) => b.t - a.t);
+}
+
+// WHAT IS HAPPENING TO THE PATIENT: one picture built from the answers, measurements and
+// observations recorded so far. It grows as the crew completes steps. It states what was
+// observed; it does not diagnose.
+export interface SituationLine { text: string; tone: 'red' | 'amber' | 'plain'; t?: number }
+export function situation(c: EmergencyCase, plan: Plan, states: { m: { key: string; label: string }; value?: string; t?: number; live?: boolean; source?: string }[], log: ChironEvent[], patientLink?: LinkStatus): SituationLine[] {
+  const out: SituationLine[] = [{ text: `${categoryText[c.category]}${c.reason && !/voice/i.test(c.reason) ? `. ${c.reason}` : ''}`, tone: 'red', t: c.startedAt }];
+  // What the crew found out by asking and checking.
+  for (const t of plan.tasks) {
+    const o = c.outcomes[t.step.id];
+    if (t.step.ask && o && (o.outcome === 'yes' || o.outcome === 'no')) out.push({ text: `${t.step.ask.question} ${o.outcome.toUpperCase()}`, tone: 'plain', t: o.t });
+  }
+  // Readings, flagged when they break a prototype warning rule.
+  for (const st of states) {
+    if (st.value === undefined) continue;
+    const n = parseFloat(st.value);
+    const rule = WARNING_RULES.find((w) => w.key === st.m.key && Number.isFinite(n) && w.test(n));
+    out.push({ text: `${st.m.label}: ${st.value}${rule ? ` — ${rule.rule}` : ''}`, tone: rule ? 'red' : 'plain', t: st.t });
+  }
+  // The newest thing the crew saw.
+  const seen = log.filter((e) => e.type === 'vitals' && e.eid === c.eid);
+  const last = seen[seen.length - 1];
+  if (last && last.type === 'vitals') out.push({ text: `Latest observation: ${last.note}`, tone: /worse|harder|not responding/i.test(last.note ?? '') ? 'red' : 'plain', t: last.t });
+  const unknown = states.filter((st) => st.value === undefined).map((st) => st.m.label);
+  if (unknown.length) out.push({ text: `Not known yet: ${unknown.join(', ')}`, tone: 'amber' });
+  if (patientLink && !patientLink.connected) out.push({ text: 'No live readings: the LINK band is offline', tone: 'amber' });
+  return out;
 }
