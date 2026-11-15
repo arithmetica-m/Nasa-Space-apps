@@ -22,6 +22,17 @@ body {
   overflow: hidden;
 }
 
+/* Scrollbars: a thin gold line on the dark background, like the instrument rules. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(200 169 106 / 45%) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgb(4 7 13 / 60%); border-left: 1px solid rgb(200 169 106 / 10%); }
+::-webkit-scrollbar-thumb { background: rgb(200 169 106 / 40%); border: 2px solid transparent; background-clip: padding-box; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: rgb(200 169 106 / 75%); background-clip: padding-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
 :focus-visible {
   outline: 2px solid #67c9d5;
   outline-offset: 3px;

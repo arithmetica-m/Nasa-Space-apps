@@ -7,6 +7,33 @@ import { categoryText } from '../emergency/report';
 import { useLog } from '../emergency/sync';
 import { speak } from './VoiceControl';
 
+// A short, loud alarm: three rising-falling beeps (about one second). Not more than three flashes of sound per second.
+function playAlarm(ref: { current?: AudioContext }, freq: number) {
+  try {
+    const Ctx = window.AudioContext;
+    if (!Ctx) return;
+    const ctx = ref.current ?? new Ctx();
+    ref.current = ctx;
+    void ctx.resume();
+    for (let i = 0; i < 3; i += 1) {
+      const t = ctx.currentTime + i * 0.35;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.linearRampToValueAtTime(freq * 1.25, t + 0.12);
+      osc.frequency.linearRampToValueAtTime(freq, t + 0.25);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.27);
+    }
+  } catch { /* no audio in this browser: the screen alert still shows */ }
+}
+
 const severity = (category: string) => category === 'behavioral'
   ? { name: 'CREW SUPPORT · ACTION REQUIRED', color: '#e39b4b' }
   : { name: 'CREW EMERGENCY · ACTION REQUIRED', color: '#ff7070' };
@@ -26,11 +53,16 @@ export function EmergencyAlerts({ mission, account, inResponse, viewingEid, onJo
   // An emergency already open on this device does not need its popup again.
   useEffect(() => { if (viewingEid) setAcknowledged((previous) => (previous.has(viewingEid) ? previous : new Set(previous).add(viewingEid))); }, [viewingEid]);
 
+  // Every device sounds an alarm when an emergency starts, including the one that started it.
+  // Emergencies already open when the page loads do not sound again.
+  const seenAtLoad = useRef<Set<string>>();
   useEffect(() => {
-    const newCases = cases.filter((item) => !announced.current.has(item.eid) && item.startedBy !== account);
+    if (!seenAtLoad.current) { seenAtLoad.current = new Set(cases.map((c) => c.eid)); cases.forEach((c) => announced.current.add(c.eid)); return; }
+    const newCases = cases.filter((item) => !announced.current.has(item.eid));
     for (const item of newCases) {
       announced.current.add(item.eid);
-      speak(`Emergency. ${patientName(item.patientId).split(' ')[0]} needs help. Say emergency to open it.`);
+      playAlarm(audioContext, item.category === 'behavioral' ? 520 : 880);
+      if (item.startedBy !== account) setTimeout(() => speak(`Emergency for ${patientName(item.patientId).split(' ')[0]}.`), 1200);
     }
   }, [cases]);
 

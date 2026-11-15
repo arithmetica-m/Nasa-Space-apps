@@ -16,7 +16,7 @@ export const PAGE_NAME: Record<Page, string> = {
   respond: 'Respond · emergency support', link: 'CHIRON LINK · wearables', roadmap: 'About CHIRON', nasa: 'NASA data in CHIRON', demo: 'Demonstration',
 };
 
-export interface SystemStatus { label: string; tone: 'ok' | 'warn' | 'alert'; detail: string }
+export interface SystemStatus { label: string; tone: 'ok' | 'warn' | 'alert'; detail: string; page?: Page }
 const TONE = { ok: '#5cc8a8', warn: '#e39b4b', alert: '#e45b5b' };
 
 interface HeaderProps {
@@ -69,9 +69,12 @@ export function CoreHeader(p: HeaderProps) {
           title={p.online ? 'Connected' : 'No connection: CHIRON keeps working on this device'}>
           {p.online ? <span className="h-2 w-2 rounded-full bg-[#5cc8a8]" /> : <WifiOff size={14} />}{p.online ? 'ONLINE' : 'OFFLINE'}
         </div>
-        <div className="flex items-center gap-1.5 border px-2 py-1 font-mono text-[11px] tracking-[0.12em]" style={{ borderColor: `${TONE[p.status.tone]}88`, color: TONE[p.status.tone] }} title={p.status.detail}>
-          <ShieldCheck size={14} /> MEDICAL SYSTEM: {p.status.label}
-        </div>
+        {/* What needs attention right now, in plain words. Tap it to go there. */}
+        <button type="button" onClick={() => p.status.page && p.onOpen(p.status.page)} disabled={!p.status.page}
+          className="flex items-center gap-1.5 border px-2 py-1 font-mono text-[11px] tracking-[0.12em] enabled:hover:bg-white/5" style={{ borderColor: `${TONE[p.status.tone]}88`, color: TONE[p.status.tone] }}
+          title={p.status.detail} aria-label={`Status: ${p.status.label}. ${p.status.detail}`}>
+          <ShieldCheck size={14} /> {p.status.label}{p.status.page && ' →'}
+        </button>
 
         <div className="ml-auto flex items-center gap-2">
           {p.account && <button type="button" onClick={p.onLogout} className="min-h-11 border border-gold/40 px-3 text-xs text-gold">LOG OUT</button>}

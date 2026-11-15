@@ -61,7 +61,7 @@ export function buildEarthReport(c: EmergencyCase, plan: Plan, mission: Mission,
   lines.push('OBSERVATIONS (as recorded by the crew)');
   if (!answers.length && !c.vitals.length && !c.measures.length && !live.length) lines.push('• None recorded yet. No measurements taken.');
   const label = (k: string) => plan.procedure?.measurements?.find((m) => m.key === k)?.label ?? k;
-  for (const m of c.measures) lines.push(`• ${gmt(m.t)} ${label(m.key)}: ${m.value} (${m.source === 'link' ? 'LINK wearable, simulated' : m.source === 'device' ? 'blood-pressure cuff, simulated' : `entered by ${name(m.by)}`})`);
+  for (const m of c.measures) lines.push(`• ${gmt(m.t)} ${label(m.key)}: ${m.value} (${m.source === 'link' ? 'LINK wearable, simulated' : m.source === 'device' ? `${m.device ?? 'blood-pressure cuff'}, simulated` : `entered by ${name(m.by)}`})`);
   for (const l of live) lines.push(`• ${l}`);
   if (missing.length) lines.push(`• NOT YET MEASURED: ${missing.join('; ')}.`);
   for (const t of answers) lines.push(`• ${gmt(c.outcomes[t.step.id].t)} ${t.step.ask!.question} → ${c.outcomes[t.step.id].outcome.toUpperCase()}`);

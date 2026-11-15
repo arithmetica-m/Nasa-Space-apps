@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Mic, RefreshCw, X } from 'lucide-react';
-import { listenOnce } from './VoiceControl';
+import { useEffect, useRef, useState } from 'react';
+import { Mic, MicOff, RefreshCw, X } from 'lucide-react';
+import { captureVoice, isListening, speak, startListening, stopListening, useVoiceState } from './VoiceControl';
 import { parseSpokenNumber } from '../lib/voiceCommands';
 import type { DayRecord } from '../types';
 import { indicatorById } from '../data/indicators';
@@ -84,16 +84,59 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
       setI(STEPS.findIndex((st) => st.kind === 'mood'));
     }, 1400);
   };
-  const sayIt = () => {
-    setSyncing('voice');
-    setHint('Listening… say the number, for example “seventy two”.');
-    listenOnce((text) => {
-      setSyncing(undefined);
-      const n = parseSpokenNumber(text);
-      if (n === undefined) setHint(`Heard “${text}”, but no number. Try again.`);
-      else { setDraft(String(n)); setHint(`Heard “${text}”. Check it, then press NEXT.`); }
-    }, (message) => { setSyncing(undefined); setHint(message); });
+  // Voice answers: one tap and the whole check-in can be answered by speaking.
+  // If the app's microphone is already on, the check-in listens straight away.
+  const voice = useVoiceState();
+  const [voiceWanted, setVoiceWanted] = useState(() => isListening());
+  const startedHere = useRef(false);
+  const capturing = voiceWanted && voice.active;
+  const toggleVoice = () => {
+    if (capturing) {
+      setVoiceWanted(false);
+      if (startedHere.current) { stopListening('Voice off.'); startedHere.current = false; }
+      setHint('');
+      return;
+    }
+    if (!isListening()) { startListening(); startedHere.current = true; }
+    setVoiceWanted(true);
   };
+  useEffect(() => () => { if (startedHere.current) stopListening('Voice off.'); }, []);
+
+  const finish = (finalSymptoms: string[]) => { setFinished(true); onDone(values, finalSymptoms); };
+  const answer = useRef<(text: string) => boolean>(() => false);
+  answer.current = (text) => {
+    const t = text.toLowerCase();
+    if (/\bemergency\b/.test(t)) return false;            // let the app open emergency mode
+    if (finished) { if (/\b(done|close|finish|okay|ok)\b/.test(t)) { onClose(); return true; } return false; }
+    if (step.kind === 'number') {
+      if (/\b(skip|next|pass)\b/.test(t)) { next(); return true; }
+      if (/\b(sync|device)\b/.test(t)) { sync(step.id); return true; }
+      const n = parseSpokenNumber(t);
+      if (n === undefined) { setHint(`Heard “${text}”. Say a number, or “skip”.`); return true; }
+      const error = measurementError(step.id, String(n));
+      if (error) { setDraft(String(n)); setHint(`Heard ${n}. ${error}`); return true; }
+      set(step.id, n); setHint(''); next();
+      return true;
+    }
+    if (step.kind === 'mood') {
+      const k = /very (low|bad)/.test(t) ? 0 : /very good|great/.test(t) ? 4 : /\b(low|bad)\b/.test(t) ? 1 : /\b(okay|ok|fine)\b/.test(t) ? 2 : /\bgood\b/.test(t) ? 3 : -1;
+      if (k >= 0) { set('mood', k + 1); next(); return true; }
+      if (/\b(skip|next|pass)\b/.test(t)) { next(); return true; }
+      setHint(`Heard “${text}”. Say very low, low, okay, good or very good.`);
+      return true;
+    }
+    const named = SYMPTOMS.filter((s) => t.includes(s.toLowerCase().split(' ')[0].slice(0, 5)));
+    if (/\b(none|no symptoms|nothing|finish|done)\b/.test(t)) { finish([...new Set([...symptoms, ...named])]); return true; }
+    if (named.length) { setSymptoms((cur) => [...new Set([...cur, ...named])]); setHint(`Added: ${named.join(', ')}. Say more, or “finish”.`); return true; }
+    setHint(`Heard “${text}”. Name a symptom, or say “none”.`);
+    return true;
+  };
+  useEffect(() => { if (!capturing) return; return captureVoice((text) => answer.current(text)); }, [capturing]);
+  // A few words to say what to answer next.
+  useEffect(() => {
+    if (!capturing) return;
+    speak(finished ? 'Check-in saved.' : step.kind === 'number' ? step.question.replace(/\s*\(.*\)/, '').split(',')[0] : step.kind === 'mood' ? 'Your mood?' : 'Any symptoms?');
+  }, [capturing, i, finished]);
 
   const draftNum = Number(draft);
   const draftValid = draft.trim() !== '' && !Number.isNaN(draftNum) && !measurementError(step.kind === 'number' ? step.id : '', draft);
@@ -103,10 +146,21 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-void/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Daily check-in">
       <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto border border-gold/40 bg-void/95 p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div className="font-mono text-[10px] tracking-[0.35em] text-gold">⚷ DAILY CHECK-IN</div>
-          <button onClick={onClose} aria-label="Close" className="text-mute hover:text-marble"><X size={16} /></button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={toggleVoice} aria-pressed={capturing}
+              className={`flex min-h-10 items-center gap-2 border px-3 font-mono text-[11px] tracking-[0.2em] ${capturing ? 'border-gold bg-gold/15 text-gold' : 'border-marble/25 text-marble/75 hover:border-gold/60 hover:text-gold'}`}>
+              {capturing ? <Mic size={14} className="animate-pulse" /> : <MicOff size={14} />} {capturing ? 'LISTENING' : 'ANSWER BY VOICE'}
+            </button>
+            <button onClick={onClose} aria-label="Close" className="text-mute hover:text-marble"><X size={16} /></button>
+          </div>
         </div>
+        {capturing && !finished && (
+          <p className="mt-3 border-l-2 border-gold bg-gold/10 px-3 py-2 text-sm text-marble/85">
+            {step.kind === 'number' ? 'Say the number, e.g. “seventy two”. Or say “skip”.' : step.kind === 'mood' ? 'Say very low, low, okay, good or very good.' : 'Name any symptoms, then say “finish”. Or say “none”.'}
+          </p>
+        )}
         {/* Progress, one small square per question */}
         <div className="mt-3 flex gap-1.5">
           {STEPS.map((_, k) => <span key={k} className={`h-1.5 flex-1 ${k < i || finished ? 'bg-gold' : k === i ? 'bg-gold/50' : 'bg-marble/10'}`} />)}
@@ -177,9 +231,9 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
                 className="flex min-h-11 items-center justify-center gap-2 border border-marble/20 text-sm text-marble/80 hover:border-gold/60 hover:text-gold disabled:opacity-50">
                 <RefreshCw size={15} className={syncing === step.id ? 'animate-spin' : ''} /> {syncing === step.id ? 'Syncing…' : `Sync from ${step.device.toLowerCase()}`}
               </button>
-              <button type="button" onClick={sayIt} disabled={!!syncing}
-                className={`flex min-h-11 items-center justify-center gap-2 border text-sm hover:border-gold/60 hover:text-gold disabled:opacity-50 ${syncing === 'voice' ? 'border-gold text-gold' : 'border-marble/20 text-marble/80'}`}>
-                <Mic size={15} /> {syncing === 'voice' ? 'Listening…' : 'Say it'}
+              <button type="button" onClick={toggleVoice}
+                className={`flex min-h-11 items-center justify-center gap-2 border text-sm hover:border-gold/60 hover:text-gold ${capturing ? 'border-gold text-gold' : 'border-marble/20 text-marble/80'}`}>
+                <Mic size={15} /> {capturing ? 'Listening: say it' : 'Say it'}
               </button>
             </div>
             {hint && <p role="status" className="mt-2 text-sm text-gold">{hint}</p>}
@@ -223,7 +277,7 @@ export function CheckIn({ latest, onClose, onDone, onTeach, crewId }: Props) {
                 ))}
               </div>
             )}
-            <button onClick={next} className="mt-6 w-full bg-gold py-2.5 font-mono text-xs tracking-[0.3em] text-void hover:bg-marble">{symptoms.length ? 'FINISH' : 'NO SYMPTOMS, FINISH'}</button>
+            <button onClick={() => finish(symptoms)} className="mt-6 w-full bg-gold py-2.5 font-mono text-xs tracking-[0.3em] text-void hover:bg-marble">{symptoms.length ? 'FINISH' : 'NO SYMPTOMS, FINISH'}</button>
           </div>
         )}
       </div>

@@ -59,7 +59,7 @@ export function liveUpdates(c: EmergencyCase, plan: Plan, log: ChironEvent[], no
       : o.outcome === 'done' ? { t: o.t, text: `${nameOf(o.by)}: ${stepText(id)}`, tone: 'plain' }
         : { t: o.t, text: `${stepText(id)} — ${o.outcome.toUpperCase()} (${nameOf(o.by)})`, tone: 'plain' });
   }
-  for (const m of c.measures) out.push({ t: m.t, text: `${plan.procedure?.measurements?.find((x) => x.key === m.key)?.label ?? m.key}: ${m.value} (${m.source === 'link' ? 'LINK band, simulated' : m.source === 'device' ? 'blood-pressure cuff, simulated' : `measured by ${nameOf(m.by)}`})`, tone: 'plain' });
+  for (const m of c.measures) out.push({ t: m.t, text: `${plan.procedure?.measurements?.find((x) => x.key === m.key)?.label ?? m.key}: ${m.value} (${m.source === 'link' ? 'LINK band, simulated' : m.source === 'device' ? `${m.device ?? 'blood-pressure cuff'}, simulated` : `measured by ${nameOf(m.by)}`})`, tone: 'plain' });
   for (const [role, a] of Object.entries(c.assignments) as [RoleId, { crewId: string; t: number; by: string }][]) out.push({ t: a.t, text: `${roleName[role]} is now ${nameOf(a.crewId)} (changed by ${nameOf(a.by)})`, tone: 'amber' });
   for (const e of log) {
     if (e.type === 'confirm-roles' && e.eid === c.eid) out.push({ t: e.t, text: `Assignments confirmed by ${nameOf(e.by)}`, tone: 'plain' });

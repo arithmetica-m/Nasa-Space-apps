@@ -59,7 +59,7 @@ export interface EmergencyCase {
   outcomes: Record<string, { outcome: 'done' | 'cannot' | 'yes' | 'no'; by: string; t: number }>;
   verified: Set<string>;
   vitals: { t: number; by: string; spo2?: number; hr?: number; note?: string }[];
-  measures: { key: string; value: string; source: 'manual' | 'link' | 'device'; t: number; by: string }[];
+  measures: { key: string; value: string; source: 'manual' | 'link' | 'device'; device?: string; t: number; by: string }[];
   assignments: Partial<Record<RoleId, { crewId: string; t: number; by: string }>>;
   messages: EarthMessage[];
 }
@@ -85,7 +85,7 @@ export function casesFrom(log: ChironEvent[]): EmergencyCase[] {
     if (e.type === 'verify') c.verified.add(e.stepId);
     if (e.type === 'vitals') c.vitals.push({ t: e.t, by: e.by, spo2: e.spo2, hr: e.hr, note: e.note });
     if (e.type === 'end') c.ended = true;
-    if (e.type === 'measure') c.measures.push({ key: e.key, value: e.value, source: e.source, t: e.t, by: e.by });
+    if (e.type === 'measure') c.measures.push({ key: e.key, value: e.value, source: e.source, device: e.device, t: e.t, by: e.by });
     if (e.type === 'assign') c.assignments[e.role] = { crewId: e.crewId, t: e.t, by: e.by };
     if (e.type === 'message') {
       const m = { ...e.message };

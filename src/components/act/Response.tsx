@@ -14,7 +14,7 @@ import { DELAY_MIN, buildPlan, casesFrom, crewNow, rolesOf } from '../../emergen
 import { publish, useLog } from '../../emergency/sync';
 import { newId } from '../../emergency/events';
 import { crew } from '../../emergency/data';
-import { speak, stopSpeaking } from '../VoiceControl';
+import { speak, stopSpeaking, useVoiceState } from '../VoiceControl';
 import { EMERGENCY_VOICE_EVENT, type EmergencyVoice } from '../../lib/voiceCommands';
 import { measurementError, numericRange } from '../../lib/measurementValidation';
 import { openProtocol } from '../Explained';
@@ -76,6 +76,7 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   const [measurementErrors, setMeasurementErrors] = useState<Record<string, string>>({});
   const [note, setNote] = useState('');
   const [showAll, setShowAll] = useState(false);
+  const voiceState = useVoiceState();
   // Voice commands reach the newest version of the handler through this ref.
   const voiceRef = useRef<(action: NonNullable<EmergencyVoice['action']>) => void>(() => undefined);
   useEffect(() => {
@@ -158,15 +159,6 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
     publish({ type: 'step', eid, by: account, stepId, outcome });
     setCannot(undefined);
   };
-  const advanceStep = (): 'advanced' | 'answer' | 'waiting' | 'none' => {
-    if (activeTask?.status === 'ready' && activeTask.step.ask) return 'answer';
-    if (activeTask?.status === 'ready') {
-      if (activeTask.step.verify === 'clinical' && !c.verified.has(activeTask.step.id)) return 'waiting';
-      complete(activeTask.step.id, 'done');
-      return 'advanced';
-    }
-    return activeTask ? 'waiting' : 'none';
-  };
   const allDone = plan.tasks.length > 0 && plan.tasks.every((task) => task.status === 'done' || task.status === 'cannot');
   const openMedicalRecord = () => {
     publish({ type: 'medical-access', eid, by: account, patientId: c.patientId, reason: accessReason });
@@ -205,25 +197,33 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   };
 
   // Voice: done / yes / no / can't / repeat / confirm act on this device's own step.
+  // On the shared screen (everyone is signed out in an emergency) they act on the first open step of the plan.
+  const shared = !me;
+  const voiceTask = isPatient ? undefined : shared ? plan.tasks.find((task) => task.status === 'ready') : activeTask;
   voiceRef.current = (action) => {
-    if (isPatient) { speak('Your crew is helping you.'); return; }
-    if (!activeTask) { speak('You have no step right now.'); return; }
-    const text = activeTask.status === 'ready' ? textOf(activeTask) : 'Wait for your crew.';
-    const confirm = activeTask.status === 'ready' && activeTask.step.verify === 'clinical' && !c.verified.has(activeTask.step.id);
-    if (action === 'repeat' || activeTask.status !== 'ready') { speak(text); return; }
+    const t = voiceTask;
+    if (isPatient) { speak('Your crew is helping.', { again: true }); return; }
+    if (!t) { speak(shared ? 'No open steps.' : 'No step for you.', { again: true }); return; }
+    const who = shared ? `${t.assignee?.name.split(' ')[0] ?? 'Crew'}: ` : '';
+    const confirm = t.status === 'ready' && t.step.verify === 'clinical' && !c.verified.has(t.step.id);
+    if (action === 'repeat') { speak(t.status === 'ready' ? `${who}${stepCue('', textOf(t), !!t.step.ask, 12)}` : 'Wait for your crew.', { maxWords: 13, again: true }); return; }
+    if (t.status !== 'ready') { speak('Wait for your crew.', { again: true }); return; }
     if (action === 'yes' || action === 'no') {
-      if (activeTask.step.ask) { complete(activeTask.step.id, action); speak(`Recorded: ${action}.`); } else speak('This step is not a question. Say done when it is finished.');
-    } else if (action === 'cannot') { setCannot(activeTask.step.id); speak(activeTask.step.ifCannot ?? 'Tell the medical lead.'); }
+      if (t.step.ask) { complete(t.step.id, action); speak(action === 'yes' ? 'Yes, saved.' : 'No, saved.', { again: true }); } else speak('Say done when finished.', { again: true });
+    } else if (action === 'cannot') { setCannot(t.step.id); speak('Okay. See the backup.', { again: true }); }
     else if (action === 'confirm') {
-      if (confirm && isLead) { publish({ type: 'verify', eid, by: account, stepId: activeTask.step.id }); speak('Confirmed.'); } else speak('Nothing to confirm.');
+      if (confirm && (isLead || shared)) { publish({ type: 'verify', eid, by: account, stepId: t.step.id }); speak('Confirmed.', { again: true }); } else speak('Nothing to confirm.', { again: true });
     } else if (action === 'next') {
-      const r = advanceStep();
-      speak(r === 'advanced' ? 'Done.' : r === 'answer' ? 'Answer yes or no.' : confirm ? (isLead ? 'Say confirm first.' : 'The medical lead must confirm this step.') : 'Waiting for your crew.');
+      if (t.step.ask) { speak('Answer yes or no.', { again: true }); return; }
+      if (confirm) { speak(isLead || shared ? 'Say confirm first.' : 'Lead must confirm.', { again: true }); return; }
+      complete(t.step.id, 'done');
+      speak('Done.', { again: true });
     }
   };
 
-  // This device reads its own person's current step aloud, once, when it appears.
-  const speakNow = readAloud && !isPatient && activeTask?.status === 'ready' ? <SpeakStep key={activeTask.step.id} text={`${me?.name.split(' ')[0] ?? ''}: ${textOf(activeTask)}`} /> : null;
+  // This device says its own person's new step in a few words, once, when it appears.
+  const speakNow = readAloud && !isPatient && activeTask?.status === 'ready'
+    ? <SpeakStep key={activeTask.step.id} text={stepCue(me?.name.split(' ')[0] ?? '', textOf(activeTask), !!activeTask.step.ask)} /> : null;
 
   const header = (
     <header className="sticky top-0 z-10 border-b-4 border-[#e45b5b] bg-[#1a0c0e] px-4 py-3 md:px-8">
@@ -247,6 +247,13 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
           className="min-h-16 border-2 border-[#e39b4b] bg-[#e39b4b]/15 px-5 text-lg font-bold text-[#f3c28d] hover:bg-[#e39b4b]/25">END EMERGENCY</button>
         <button onClick={onLeave} aria-label="Back to the dashboard" className="flex min-h-16 items-center gap-2 border-2 border-marble/30 px-4 text-lg text-marble/80 hover:border-marble/60"><ArrowLeft size={20} /> EXIT</button>
       </div>
+      {/* What the microphone heard, so voice always gives something to see. */}
+      {(voiceState.active || /permission|blocked|microphone|speech service|stopped/i.test(voiceState.message)) && (
+        <p role="status" className={`mx-auto mt-2 w-full max-w-5xl text-base ${voiceState.active ? 'text-[#7bd5b8]' : 'text-[#f3c28d]'}`}>
+          {voiceState.active && <Mic size={16} className="mr-1 inline animate-pulse" />}
+          {voiceState.active && !/^Heard/.test(voiceState.message) ? 'Listening · say done, yes, no, can’t, repeat or confirm' : voiceState.message}
+        </p>
+      )}
       {ending && (
         <section id="end-emergency-confirmation" aria-labelledby="end-emergency-title" className="mx-auto mt-4 w-full max-w-5xl space-y-3 border-2 border-[#e39b4b]/60 bg-[#1a0c0e] p-4">
           <h2 id="end-emergency-title" className="text-2xl font-bold text-marble">End this emergency for everyone?</h2>
@@ -545,8 +552,16 @@ export function Response({ eid, kb, account, onLeave, listening, voiceSupported,
   );
 }
 
-// Reads a new step aloud once, when it appears.
+// A step in a few words: the step itself when it is short, otherwise a cue to look at the screen.
+function stepCue(name: string, text: string, isQuestion: boolean, maxWords = 7) {
+  const first = (text.replace(/\s*\([^)]*\)/g, '').trim().split(/(?<=[.!?])\s+/)[0] ?? '').trim();
+  const short = first.split(/\s+/).length <= maxWords;
+  const body = short ? first : isQuestion ? 'Question on screen.' : 'New step on screen.';
+  return name ? `${name}: ${body}` : body;
+}
+
+// Says a new step once, when it appears.
 function SpeakStep({ text }: { text: string }) {
-  useEffect(() => { if (text) speak(text); }, [text]);
+  useEffect(() => { if (text) speak(text, { maxWords: 9 }); }, [text]);
   return null;
 }

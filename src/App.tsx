@@ -36,12 +36,12 @@ import { accessRole } from './access/access';
 import { DemoPage, type DemoAction } from './components/pages/DemoPage';
 import { publish } from './emergency/sync';
 import { SosAlerts } from './components/SosAlerts';
-import { linkFor, useNow, withLinkEvents } from './link/link';
+import { bandInfo, linkFor, useNow, withLinkEvents } from './link/link';
 import { missionMemory } from './lib/memory';
 import { skillStatus } from './train/training';
 import { checkResources } from './emergency/engine';
 import { EmergencyAlerts } from './components/EmergencyAlerts';
-import { NEXT_STEP_EVENT, speak, stopSpeaking, useVoiceControl } from './components/VoiceControl';
+import { NEXT_STEP_EVENT, setVoiceMessage, speak, stopSpeaking, useVoiceControl } from './components/VoiceControl';
 import type { Selection } from './components/Frieze';
 import { crew, procedures as emergencyProcedures } from './emergency/data';
 import { useAccount } from './emergency/account';
@@ -162,14 +162,15 @@ export default function App() {
   const voice = useVoiceControl((text) => {
     const cmd = parseCommand(text, crew);
     if (!signedIn && (cmd.type === 'checkin' || (cmd.type === 'profile' && !cmd.crewId))) {
-      goHome(); speak('Choose your profile on the dashboard and enter your PIN for personal health features.'); return;
+      goHome(); speak('Choose your profile first.'); return;
     }
     const nameOf = (id: string) => crew.find((m) => m.id === id)?.name ?? 'crew member';
     // Inside emergency mode, short words drive the response: done, yes, no, can't, repeat.
     if (mode === 'act' && cmd.type !== 'silence') {
       const ev = parseEmergency(text, crew);
       if (ev.action || ev.category || ev.patientId) window.dispatchEvent(new CustomEvent(EMERGENCY_VOICE_EVENT, { detail: ev }));
-      else speak('Say done, yes, no, can not, or repeat.');
+      // Not understood: show it on screen, stay quiet.
+      else setVoiceMessage(`Heard “${text}”. Say done, yes, no, can't or repeat.`);
       return;
     }
     switch (cmd.type) {
@@ -180,27 +181,27 @@ export default function App() {
         const running = activeCases[activeCases.length - 1];
         if (running && !ev.patientId && !ev.category) { joinAct(running.eid); speak('Opening the emergency.'); break; }
         openAct('Started by voice', ev.patientId);
-        speak(ev.category ? 'Emergency mode.' : 'Emergency mode. Who needs help, and what is happening?');
+        speak(ev.category || ev.patientId ? 'Emergency mode.' : 'Emergency. Who needs help?');
         if (ev.category) setTimeout(() => window.dispatchEvent(new CustomEvent(EMERGENCY_VOICE_EVENT, { detail: ev })), 400);
         break;
       }
       case 'next':
         if (mode === 'act' || mode === 'teach') window.dispatchEvent(new Event(NEXT_STEP_EVENT));
-        else speak('Open a procedure or an emergency first.');
+        else setVoiceMessage('“Next” works inside a guide or an emergency.');
         break;
       case 'silence': stopSpeaking(); break;
       case 'profile': {
         const id = cmd.crewId ?? account;
         openProfile(id);
-        speak(`Opening ${id === account ? 'your' : `${nameOf(id)}'s`} dashboard.`);
+        speak(id === account ? 'Your profile.' : `${nameOf(id).split(' ')[0]}'s profile.`);
         break;
       }
       case 'home': goHome(); speak('Crew status.'); break;
-      case 'checkin': setPendingCheckIn(true); openProfile(account); speak('Enter your PIN to check in.'); break;
-      case 'teach': setTrainFocus('train'); setPage('train'); setMode('watch'); speak('Opening training.'); break;
-      case 'equipment': setPage('respond'); setMode('watch'); speak('Showing medical stock.'); break;
-      case 'library': setLibraryOpen(true); speak('Opening the medical library.'); break;
-      default: speak('Sorry, I did not catch that. Try crew status, my profile, check in, or emergency.');
+      case 'checkin': setPendingCheckIn(true); openProfile(account); speak('Enter your PIN.'); break;
+      case 'teach': setTrainFocus('train'); setPage('train'); setMode('watch'); speak('Training.'); break;
+      case 'equipment': setPage('respond'); setMode('watch'); speak('Medical stock.'); break;
+      case 'library': setLibraryOpen(true); speak('Medical library.'); break;
+      default: setVoiceMessage(`Heard “${text}”. Try: crew status, my profile, check in, emergency.`);
     }
   });
 
@@ -241,13 +242,17 @@ export default function App() {
   // Overall medical system status, most important first.
   const status = useMemo<SystemStatus>(() => {
     if (!mission) return { label: 'READY', tone: 'ok', detail: '' };
-    if (activeCases.length) return { label: 'EMERGENCY ACTIVE', tone: 'alert', detail: `${activeCases.length} active emergency response(s).` };
+    if (activeCases.length) return { label: activeCases.length > 1 ? `${activeCases.length} EMERGENCIES ACTIVE` : 'EMERGENCY ACTIVE', tone: 'alert', detail: `${activeCases.length} active emergency response(s).`, page: 'respond' };
     const stock = inventoryNow(log, mission.id);
     const gaps = kb.filter((p) => p.status === 'approved' && p.missions.includes(mission.id)).flatMap((p) => checkResources(p, stock)).filter((c) => !c.ok && !c.alternative);
-    if (gaps.length) return { label: 'CHECK STOCK', tone: 'warn', detail: `Missing for a loaded demo procedure: ${[...new Set(gaps.map((g) => g.name))].join(', ')}.` };
-    const offline = Object.values(links).filter((l) => !l.connected).length;
-    if (offline) return { label: 'LINK OFFLINE', tone: 'warn', detail: `${offline} wearable(s) disconnected.` };
-    return { label: 'READY', tone: 'ok', detail: 'Protocols, equipment and wearables ready.' };
+    if (gaps.length) return { label: 'MEDICAL SUPPLIES MISSING', tone: 'warn', detail: `Missing for a loaded demo procedure: ${[...new Set(gaps.map((g) => g.name))].join(', ')}.`, page: 'respond' };
+    const offline = Object.values(links).filter((l) => !l.connected);
+    const first = (id: string) => (crew.find((m) => m.id === id)?.name.split(' ')[0] ?? 'A').toUpperCase();
+    if (offline.length) return {
+      label: offline.length === 1 ? `${first(offline[0].crewId)}’S BAND IS OFFLINE` : `${offline.length} BANDS ARE OFFLINE`, tone: 'warn',
+      detail: 'A wristband is not connected: its alerts and tasks may not reach that person, and their readings are not live.', page: 'link',
+    };
+    return { label: 'ALL SYSTEMS READY', tone: 'ok', detail: 'Procedures, equipment and wristbands ready.' };
   }, [mission, activeCases, log, kb, links]);
 
   // One live line for each of the four main functions on the home screen.
@@ -352,6 +357,11 @@ export default function App() {
     if (a === 'reset') {
       // Start the story clean: Ana's band back to normal, open emergencies and band alarms closed.
       publish({ type: 'link-clear', by: 'ana', crewId: 'ana' });
+      // Bands switched on or off in the LINK demo go back to how the mission started.
+      for (const m of crew) {
+        const start = bandInfo(m.id).connected;
+        if (bandInfo(m.id, log).connected !== start) publish({ type: 'band', by: m.id, crewId: m.id, connected: start });
+      }
       for (const c of activeCases) publish({ type: 'end', eid: c.eid, by: account || 'shared-dashboard' });
       for (const e of log) if (e.type === 'sos' && !log.some((x) => x.type === 'sos-clear' && x.sosId === e.id)) publish({ type: 'sos-clear', by: account || 'shared-dashboard', sosId: e.id });
     }

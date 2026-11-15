@@ -23,7 +23,7 @@ export type ChironEvent = Base & (
   // A new version of a medical library entry, released by Mission Control. Crew devices cannot send this.
   | { type: 'library'; entry: LibraryEntry; note: string; sig?: string }
   // A measurement recorded during an emergency (by hand, or taken from the patient's LINK wearable).
-  | { type: 'measure'; eid: string; key: string; value: string; source: 'manual' | 'link' | 'device' }
+  | { type: 'measure'; eid: string; key: string; value: string; source: 'manual' | 'link' | 'device'; device?: string }
   // The crew changed who does a role (CHIRON's suggestion is only a suggestion).
   | { type: 'assign'; eid: string; role: RoleId; crewId: string }
   // The physical emergency button on a CHIRON LINK wearable was pressed.

@@ -40,12 +40,23 @@ export function Act({ mission, reason, kb, account, joinEid, patient: initialPat
   const [behavioral, setBehavioral] = useState(false);
 
   const start = (category: Category, who = patient) => {
-    if (!crew.some((member) => member.id === who)) { speak('Choose who needs help first.'); return; }
+    if (!crew.some((member) => member.id === who)) { speak('Who needs help?'); return; }
     if (category === 'behavioral') { setBehavioral(true); return; }
     const id = newId();
     const now = Date.now();
     const delay = DELAY_MIN[mission.id] * 60_000; // real signal travel time each way
     publish({ type: 'start', eid: id, by: account, category, patientId: who, mission: mission.id, reason });
+    // Readings the spacecraft and the patient's band already have are recorded at once (simulated).
+    // Everything that needs a person (symptoms, blood pressure, exposure) stays for the crew to record.
+    const hhmm = (t: number) => `${new Date(t).toISOString().slice(11, 16)} GMT`;
+    const auto: { key: string; value: string; source: 'link' | 'device'; device?: string }[] =
+      category === 'respiratory' ? [
+        { key: 'co2', value: '2.6 mmHg', source: 'device', device: 'cabin air sensor in this module' },
+        { key: 'resp', value: '24 breaths/min', source: 'link' },
+      ] : category === 'dcs' ? [
+        { key: 'eva_end', value: hhmm(now - 35 * 60_000), source: 'device', device: 'EVA log' },
+      ] : [];
+    for (const a of auto) publish({ type: 'measure', eid: id, by: account, ...a });
     // The initial report to Earth is drafted and sent by the response screen (emergency/report.ts).
     publish({ type: 'message', eid: id, by: 'earth', message: {
       id: newId(), direction: 'in', authority: 'medical', title: 'Flight surgeon (SIMULATED for the demo)',
@@ -60,8 +71,8 @@ export function Act({ mission, reason, kb, account, joinEid, patient: initialPat
     const who = v.patientId ?? patient;
     if (v.patientId) setPatient(v.patientId);
     if (v.category) start(v.category, who);
-    else if (v.patientId) speak(`${crew.find((c) => c.id === who)?.name.split(' ')[0]}. What is happening? Say breathing, allergy, decompression, or panic.`);
-    else speak('Say who needs help, then breathing, allergy, decompression, or panic.');
+    else if (v.patientId) speak(`${crew.find((c) => c.id === who)?.name.split(' ')[0]}. What is happening?`);
+    else speak('Who needs help?');
   };
   useEffect(() => {
     const on = (e: Event) => voiceRef.current((e as CustomEvent<EmergencyVoice>).detail ?? {});

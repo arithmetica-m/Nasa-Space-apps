@@ -33,7 +33,7 @@ export function measureStates(c: EmergencyCase, plan: Plan, patientLink?: LinkSt
     const lr = m.source === 'link' ? patientLink?.readings.find((r) => r.key === m.key) : undefined;
     const rec = [...c.measures].reverse().find((x) => x.key === m.key);
     if (lr && lr.value !== undefined && lr.live && lr.t !== undefined && (!rec || lr.t > rec.t)) return { m, value: `${lr.value} ${lr.unit}`, source: 'LINK wearable, live (simulated)', t: lr.t, live: true };
-    if (rec) return { m, value: rec.value, source: rec.source === 'link' ? 'LINK wearable (simulated), added to the record' : rec.source === 'device' ? 'blood-pressure cuff (simulated)' : `entered by ${nameOf(rec.by)}`, t: rec.t };
+    if (rec) return { m, value: rec.value, source: rec.source === 'link' ? 'LINK wearable (simulated), added to the record' : rec.source === 'device' ? `${rec.device ?? 'blood-pressure cuff'} (simulated)` : `entered by ${nameOf(rec.by)}`, t: rec.t };
     return { m };
   });
 }
